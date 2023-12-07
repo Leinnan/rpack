@@ -3,9 +3,8 @@ use std::{collections::HashMap, io::Cursor};
 use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText};
 use image::DynamicImage;
 
-use texture_packer::{
-    importer::ImageImporter, texture::Texture, TexturePacker, TexturePackerConfig,
-};
+use serde_json::Value;
+use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const TOP_SIDE_MARGIN: f32 = 10.0;
 pub const HEADER_HEIGHT: f32 = 45.0;
@@ -16,7 +15,75 @@ pub const GIT_HASH: &str = env!("GIT_HASH");
 pub struct Spritesheet {
     pub data: Vec<u8>,
     pub frames: HashMap<String, texture_packer::Frame<String>>,
+    pub frames_json: Value,
     pub size: (u32, u32),
+}
+
+/// Boundaries and properties of a packed texture.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct SerializableFrame {
+    /// Key used to uniquely identify this frame.
+    pub key: String,
+    /// Rectangle describing the texture coordinates and size.
+    pub frame: SerializableRect,
+    /// True if the texture was rotated during packing.
+    /// If it was rotated, it was rotated 90 degrees clockwise.
+    pub rotated: bool,
+    /// True if the texture was trimmed during packing.
+    pub trimmed: bool,
+
+    // (x, y) is the trimmed frame position at original image
+    // (w, h) is original image size
+    //
+    //            w
+    //     +--------------+
+    //     | (x, y)       |
+    //     |  ^           |
+    //     |  |           |
+    //     |  *********   |
+    //     |  *       *   |  h
+    //     |  *       *   |
+    //     |  *********   |
+    //     |              |
+    //     +--------------+
+    /// Source texture size before any trimming.
+    pub source: SerializableRect,
+}
+
+impl From<texture_packer::Frame<String>> for SerializableFrame {
+    fn from(value: texture_packer::Frame<String>) -> Self {
+        SerializableFrame {
+            key: value.key,
+            frame: value.frame.into(),
+            rotated: value.rotated,
+            trimmed: value.trimmed,
+            source: value.source.into(),
+        }
+    }
+}
+
+/// Defines a rectangle in pixels with the origin at the top-left of the texture atlas.
+#[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct SerializableRect {
+    /// Horizontal position the rectangle begins at.
+    pub x: u32,
+    /// Vertical position the rectangle begins at.
+    pub y: u32,
+    /// Width of the rectangle.
+    pub w: u32,
+    /// Height of the rectangle.
+    pub h: u32,
+}
+
+impl From<texture_packer::Rect> for SerializableRect {
+    fn from(value: texture_packer::Rect) -> Self {
+        SerializableRect {
+            h: value.h,
+            w: value.w,
+            x: value.x,
+            y: value.y,
+        }
+    }
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -105,15 +172,25 @@ impl TemplateApp {
             println!("  {:7} : {:?}", name, frame.frame);
         }
         let mut out_vec = vec![];
-        let exporter = texture_packer::exporter::ImageExporter::export(&packer).unwrap();
-        exporter
-            .write_to(&mut Cursor::new(&mut out_vec), image::ImageFormat::Png)
+        let exported_image = texture_packer::exporter::ImageExporter::export(&packer).unwrap();
+        let mut img = image::DynamicImage::new_rgba8(self.config.max_width, self.config.max_height);
+        image::imageops::overlay(&mut img, &exported_image, 0, 0);
+
+        img.write_to(&mut Cursor::new(&mut out_vec), image::ImageFormat::Png)
             .unwrap();
 
+        let frames_info: Vec<SerializableFrame> = packer
+            .get_frames()
+            .values()
+            .map(|v| -> SerializableFrame { (*v).clone().into() })
+            .collect();
+        let frames_string = serde_json::to_string_pretty(&frames_info).unwrap();
+        let frames_json = serde_json::from_str(&frames_string).unwrap();
         self.data = Some(Spritesheet {
             data: out_vec.clone(),
             frames: packer.get_frames().clone(),
-            size: (packer.width(), packer.height()),
+            size: (img.width(), img.height()),
+            frames_json,
         });
         let id = format!("bytes://output_{}.png", self.counter);
         self.image = None;
@@ -300,19 +377,22 @@ impl eframe::App for TemplateApp {
                         });
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui|{
 
+                egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                 if let Some(image) = &self.image {
                     ui.horizontal_top(|ui|{
                         let data = &self.data.clone().unwrap();
                         ui.label(format!("{} frames, size: {}x{}",data.frames.len(),data.size.0,data.size.1));
                     });
-                    CollapsingHeader::new("Preview")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        ui.add(image.clone());
+                        CollapsingHeader::new("Preview")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            ui.label(RichText::new("Frames JSON").strong());
+                            egui_json_tree::JsonTree::new("simple-tree", &self.data.clone().unwrap().frames_json).show(ui);
+                            ui.label(RichText::new("Spritesheet").strong());
+                            ui.add(image.clone());
                     });
                 }
                 ui.separator();
-                egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
                     let mut index_to_remove : Option<usize> = None;
                     for (i, file) in self.dropped_files.iter().enumerate() {
                         let mut info = if let Some(path) = &file.path {

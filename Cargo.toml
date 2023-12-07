@@ -17,6 +17,8 @@ eframe = { version = "0.24.1", default-features = false, features = [
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
 log = "0.4"
+serde_json = "1"
+egui_json_tree = "0.2"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
