@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Cursor};
 
-use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText};
+use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText, Vec2};
 use image::DynamicImage;
 
 use serde_json::Value;
@@ -199,8 +199,7 @@ impl TemplateApp {
 
         let id = format!("bytes://output_{}.png", self.counter);
         ctx.include_bytes(id.clone(), out_vec.clone());
-        println!("LENGTH OF {}: {}", id.clone(), out_vec.len());
-        self.image = Some(Image::from_uri(id.clone()));
+        self.image = Some(Image::from_uri(id.clone()).max_size(Vec2::new(256.0,256.0)));
         ctx.request_repaint();
     }
 
@@ -358,43 +357,42 @@ impl eframe::App for TemplateApp {
                 ui.add(egui::Label::new(text));
             }
             if !self.dropped_files.is_empty() {
-                CollapsingHeader::new("Settings")
-                        .default_open(false)
-                        .show(ui, |ui| {
-                ui.add(
-                    egui::Slider::new(&mut self.config.max_width, 64..=4096).text("Max width"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut self.config.max_height, 64..=4096).text("Max height"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut self.config.border_padding, 0..=10).text("border padding"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut self.config.texture_padding, 0..=10).text("texture padding"),
-                );
-                ui.checkbox(&mut self.config.allow_rotation, "Allow rotation")
-                .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
-                ui.checkbox(&mut self.config.texture_outlines, "Texture outlines")
-                .on_hover_text("True to draw the red line on the edge of the each frames. Useful for debugging.");
-                ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
-                        });
+                
+                ui.horizontal_top(|ui|{
+                        if let Some(image) = &self.image {
+                            ui.add(image.clone());
+                        }
+                        CollapsingHeader::new("Settings")
+                                .default_open(false)
+                                .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.config.max_width, 64..=4096).text("Width"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.config.max_height, 64..=4096).text("Height"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.config.border_padding, 0..=10).text("Border Padding"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.config.texture_padding, 0..=10).text("Texture Padding"),
+                        );
+                        ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
+                        .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
+                        ui.checkbox(&mut self.config.texture_outlines, "Texture Outlines")
+                        .on_hover_text("True to draw the red line on the edge of the each frames. Useful for debugging.");
+                        ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
+                                });
+                });
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui|{
 
                 egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-                if let Some(image) = &self.image {
+                if let Some(data) = &self.data {
                     ui.horizontal_top(|ui|{
-                        let data = &self.data.clone().unwrap();
                         ui.label(format!("{} frames, size: {}x{}",data.frames.len(),data.size.0,data.size.1));
                     });
-                        CollapsingHeader::new("Preview")
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            ui.label(RichText::new("Frames JSON").strong());
-                            egui_json_tree::JsonTree::new("simple-tree", &self.data.clone().unwrap().frames_json).show(ui);
-                            ui.label(RichText::new("Spritesheet").strong());
-                            ui.add(image.clone());
-                    });
+                    ui.label(RichText::new("Frames JSON").strong());
+                    egui_json_tree::JsonTree::new("simple-tree", &data.frames_json).show(ui);
                 }
                 ui.separator();
                     let mut index_to_remove : Option<usize> = None;
