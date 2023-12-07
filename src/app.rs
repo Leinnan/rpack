@@ -199,7 +199,7 @@ impl TemplateApp {
 
         let id = format!("bytes://output_{}.png", self.counter);
         ctx.include_bytes(id.clone(), out_vec.clone());
-        self.image = Some(Image::from_uri(id.clone()).max_size(Vec2::new(256.0,256.0)));
+        self.image = Some(Image::from_uri(id.clone()).max_size(Vec2::new(256.0, 256.0)));
         ctx.request_repaint();
     }
 
@@ -357,7 +357,6 @@ impl eframe::App for TemplateApp {
                 ui.add(egui::Label::new(text));
             }
             if !self.dropped_files.is_empty() {
-                
                 ui.horizontal_top(|ui|{
                         if let Some(image) = &self.image {
                             ui.add(image.clone());
