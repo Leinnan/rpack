@@ -118,8 +118,8 @@ impl Default for TemplateApp {
             value: 2.7,
             dropped_files: vec![],
             config: TexturePackerConfig {
-                max_width: 2048,
-                max_height: 2048,
+                max_width: 512,
+                max_height: 512,
                 allow_rotation: false,
                 border_padding: 2,
                 trim: false,
@@ -299,6 +299,10 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.dropped_files.is_empty() && self.image.is_some() {
+            self.image = None;
+            self.data = None;
+        }
         egui::TopBottomPanel::top("topPanel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
