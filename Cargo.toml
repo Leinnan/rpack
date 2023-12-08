@@ -25,7 +25,7 @@ serde = { version = "1", features = ["derive"] }
 texture_packer = {version="0.25.0", features = ["common"]}
 image = { version = "0.24", features = ["jpeg", "png"] }
 egui_extras = { version = "*", features = ["all_loaders"] }
-rfd = "0.12.1"
+rfd = {version="0.12", features = []}
 wasm-bindgen-futures = "0.4.39"
 
 # native:
