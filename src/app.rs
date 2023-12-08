@@ -207,9 +207,9 @@ impl TemplateApp {
         if self.data.is_none() {
             return;
         }
-        let data = self.data.clone().unwrap().data;
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let data = self.data.clone().unwrap().data;
             use std::io::Write;
             let mut file = std::fs::File::create("result.png").unwrap();
             let write_result = file.write_all(&data);
@@ -223,33 +223,25 @@ impl TemplateApp {
             }
         }
         #[cfg(target_arch = "wasm32")]
-        save_blob_on_wasm(&data, "result.png");
+        {
+            let data = self.data.clone().unwrap().data;
+            wasm_bindgen_futures::spawn_local(async move {
+                let file = rfd::AsyncFileDialog::new()
+                    .set_directory(".")
+                    .set_file_name("output.png")
+                    .save_file()
+                    .await;
+                match file {
+                    None => (),
+                    Some(file) => {
+                        // let module = serde_yaml::to_string(&module).unwrap();
+                        // TODO: error handling
+                        file.write(&data).await.unwrap();
+                    }
+                }
+            });
+        }
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn save_blob_on_wasm(buf: &[u8], id: &str) {
-    use wasm_bindgen::*;
-    use web_sys::*;
-    let window = web_sys::window().unwrap();
-    let doc = window.document().unwrap();
-    let arr: js_sys::Array = buf
-        .iter()
-        .copied()
-        .flat_map(|n| n.to_be_bytes().into_iter().map(JsValue::from))
-        .collect();
-    let blob = Blob::new_with_u8_array_sequence_and_options(
-        &arr,
-        web_sys::BlobPropertyBag::new().type_("data:image/png;base64"),
-    )
-    .unwrap();
-    let blob_url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
-    let download_link = doc.create_element("a").unwrap();
-    let download_link: HtmlAnchorElement = download_link.unchecked_into();
-    download_link.set_href(&blob_url);
-    download_link.set_download(id);
-    doc.body().unwrap().append_child(&download_link).unwrap();
-    download_link.click();
 }
 
 fn setup_custom_fonts(ctx: &egui::Context) {
