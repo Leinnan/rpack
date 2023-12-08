@@ -1,4 +1,4 @@
-name: Github Pages
+name: itch.io Build
 
 # By default, runs if you push to master. keeps your deployed app in sync with master branch.
 on:
@@ -36,7 +36,7 @@ jobs:
         uses: KikimoraGames/itch-publish@v0.0.3
         with:
           gameData: ./dist
-          itchUsername: Leinnan
+          itchUsername: mevlyshkin
           itchGameId: rpack
           buildChannel: wasm
           butlerApiKey: ${{ secrets.butlerApi }}
