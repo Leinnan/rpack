@@ -31,7 +31,7 @@ jobs:
       - name: Download and install Trunk binary
         run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
       - name: Build
-        run: ./trunk build --release --public-url "html/9265032/"
+        run: ./trunk build --release --public-url "html/9267080-877894/"
       - name: Itch.io - Publish
         uses: KikimoraGames/itch-publish@v0.0.3
         with:
