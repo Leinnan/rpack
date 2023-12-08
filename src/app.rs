@@ -384,6 +384,13 @@ impl eframe::App for TemplateApp {
                     });
                     ui.label(RichText::new("Frames JSON").strong());
                     egui_json_tree::JsonTree::new("simple-tree", &data.frames_json).show(ui);
+                    if ui
+                    .add(egui::Button::new("Copy JSON to Clipboard"))
+                    .clicked()
+                {
+                    
+                    ui.output_mut(|o| o.copied_text = data.frames_json.to_string());
+                };
                 }
                 ui.separator();
                     let mut index_to_remove : Option<usize> = None;
