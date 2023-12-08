@@ -3,6 +3,7 @@ use std::{collections::HashMap, io::Cursor};
 use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText, Vec2};
 use image::DynamicImage;
 
+use rfd::FileDialog;
 use serde_json::Value;
 use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
@@ -211,15 +212,18 @@ impl TemplateApp {
         {
             let data = self.data.clone().unwrap().data;
             use std::io::Write;
-            let mut file = std::fs::File::create("result.png").unwrap();
-            let write_result = file.write_all(&data);
-            if write_result.is_err() {
-                self.error = Some(format!(
-                    "Could not make atlas, error: {:?}",
-                    write_result.unwrap_err()
-                ));
-            } else {
-                println!("Output texture stored in {:?}", file);
+            let path_buf = FileDialog::new().set_directory(".").add_filter("Image", &["png"]).set_file_name("output.png").save_file();
+            if let Some(path) = path_buf {
+                let mut file = std::fs::File::create(path).unwrap();
+                let write_result = file.write_all(&data);
+                if write_result.is_err() {
+                    self.error = Some(format!(
+                        "Could not make atlas, error: {:?}",
+                        write_result.unwrap_err()
+                    ));
+                } else {
+                    println!("Output texture stored in {:?}", file);
+                }
             }
         }
         #[cfg(target_arch = "wasm32")]
