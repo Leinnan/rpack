@@ -35,7 +35,7 @@ jobs:
       - name: Build
         run: ./trunk build --release
       - name: Update result file
-        run: sed -i 's|/rpack|rpack|g' dist/index.html
+        run: sed -i 's|/rpack|./rpack|g' dist/index.html
       - name: Itch.io - Publish
         uses: KikimoraGames/itch-publish@v0.0.3
         with:
