@@ -2,6 +2,8 @@
 
 [![Build Status](https://github.com/Leinnan/rpack/workflows/CI/badge.svg)](https://github.com/Leinnan/rpack/actions?workflow=CI)
 
+Create spritesheets in seconds!
+
 Attempt to build texture atlas packer GUI.
 
 ### Testing locally
