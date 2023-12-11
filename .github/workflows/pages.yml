@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - master
+    paths-ignore:
+        - 'README.md'
 # to only run when you do a new github release, comment out above part and uncomment the below trigger.
 # on:
 #   release:
