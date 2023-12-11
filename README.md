@@ -6,6 +6,8 @@ Create spritesheets in seconds!
 
 Attempt to build texture atlas packer GUI.
 
+![rpack_p9ayUcVnzY](https://github.com/Leinnan/rpack/assets/13188195/289fb455-8ff0-4cbf-8830-b3be773b6a42)
+
 ### Testing locally
 
 Make sure you are using the latest version of stable rust by running `rustup update`.
@@ -41,5 +43,3 @@ We use [Trunk](https://trunkrs.dev/) to build for web target.
 > To enable Github Pages, you need to go to Repository -> Settings -> Pages -> Source -> set to `gh-pages` branch and `/` (root).
 >
 > If `gh-pages` is not available in `Source`, just create and push a branch called `gh-pages` and it should be available.
-
-You can test the template app at <https://emilk.github.io/eframe_template/>.
