@@ -259,11 +259,11 @@ fn setup_custom_fonts(ctx: &egui::Context) {
     // .ttf and .otf files supported.
     fonts.font_data.insert(
         "regular".to_owned(),
-        egui::FontData::from_static(include_bytes!("../static/JetBrainsMonoNL-Regular.ttf")),
+        egui::FontData::from_static(include_bytes!("../static/JetBrainsMonoNL-Regular.ttf")).into(),
     );
     fonts.font_data.insert(
         "semibold".to_owned(),
-        egui::FontData::from_static(include_bytes!("../static/JetBrainsMono-SemiBold.ttf")),
+        egui::FontData::from_static(include_bytes!("../static/JetBrainsMono-SemiBold.ttf")).into(),
     );
 
     // Put my font first (highest priority) for proportional text:
@@ -488,7 +488,7 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         ui.hyperlink_to(format!("Build: {}", GIT_HASH), env!("CARGO_PKG_HOMEPAGE"));
         egui::warn_if_debug_build(ui);
         ui.separator();
-        egui::widgets::global_dark_light_mode_buttons(ui);
+        egui::widgets::global_theme_preference_switch(ui);
         ui.separator();
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.label("Made by ");
