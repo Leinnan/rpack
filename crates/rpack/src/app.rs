@@ -1,102 +1,12 @@
-use std::{collections::HashMap, io::Cursor};
-
 use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText, Vec2};
 use image::DynamicImage;
-use serde_json::Value;
-use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
+use rpack_cli::{ImageFile, Spritesheet};
+use texture_packer::{importer::ImageImporter, TexturePackerConfig};
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const TOP_SIDE_MARGIN: f32 = 10.0;
 pub const HEADER_HEIGHT: f32 = 45.0;
 pub const TOP_BUTTON_WIDTH: f32 = 150.0;
 pub const GIT_HASH: &str = env!("GIT_HASH");
-
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct AtlasFrame {
-    pub key: String,
-    pub frame: SerializableRect,
-}
-
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct AtlasAsset {
-    pub size: [u32; 2],
-    pub name: String,
-    pub frames: Vec<AtlasFrame>,
-}
-
-#[derive(Clone)]
-pub struct Spritesheet {
-    pub data: Vec<u8>,
-    pub frames: HashMap<String, texture_packer::Frame<String>>,
-    pub atlas_asset_json: Value,
-    pub size: (u32, u32),
-}
-
-/// Boundaries and properties of a packed texture.
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct SerializableFrame {
-    /// Key used to uniquely identify this frame.
-    pub key: String,
-    /// Rectangle describing the texture coordinates and size.
-    pub frame: SerializableRect,
-    /// True if the texture was rotated during packing.
-    /// If it was rotated, it was rotated 90 degrees clockwise.
-    pub rotated: bool,
-    /// True if the texture was trimmed during packing.
-    pub trimmed: bool,
-
-    // (x, y) is the trimmed frame position at original image
-    // (w, h) is original image size
-    //
-    //            w
-    //     +--------------+
-    //     | (x, y)       |
-    //     |  ^           |
-    //     |  |           |
-    //     |  *********   |
-    //     |  *       *   |  h
-    //     |  *       *   |
-    //     |  *********   |
-    //     |              |
-    //     +--------------+
-    /// Source texture size before any trimming.
-    pub source: SerializableRect,
-}
-
-impl From<texture_packer::Frame<String>> for SerializableFrame {
-    fn from(value: texture_packer::Frame<String>) -> Self {
-        SerializableFrame {
-            key: value.key,
-            frame: value.frame.into(),
-            rotated: value.rotated,
-            trimmed: value.trimmed,
-            source: value.source.into(),
-        }
-    }
-}
-
-/// Defines a rectangle in pixels with the origin at the top-left of the texture atlas.
-#[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct SerializableRect {
-    /// Horizontal position the rectangle begins at.
-    pub x: u32,
-    /// Vertical position the rectangle begins at.
-    pub y: u32,
-    /// Width of the rectangle.
-    pub w: u32,
-    /// Height of the rectangle.
-    pub h: u32,
-}
-
-impl From<texture_packer::Rect> for SerializableRect {
-    fn from(value: texture_packer::Rect) -> Self {
-        SerializableRect {
-            h: value.h,
-            w: value.w,
-            x: value.x,
-            y: value.y,
-        }
-    }
-}
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -106,15 +16,14 @@ pub struct TemplateApp {
     dropped_files: Vec<DroppedFile>,
     #[serde(skip)]
     config: TexturePackerConfig,
-
     #[serde(skip)]
     image: Option<Image<'static>>,
     #[serde(skip)]
+    name: String,
+    #[serde(skip)]
     counter: i32,
     #[serde(skip)]
-    data: Option<Spritesheet>,
-    #[serde(skip)]
-    error: Option<String>,
+    data: Option<Result<Spritesheet, String>>,
 }
 
 impl Default for TemplateApp {
@@ -132,7 +41,7 @@ impl Default for TemplateApp {
             counter: 0,
             image: None,
             data: None,
-            error: None,
+            name: String::from("Tilemap"),
         }
     }
 }
@@ -171,103 +80,78 @@ impl TemplateApp {
 
         prefix
     }
+    pub fn image_from_dropped_file<P>(file: &DroppedFile, prefix: P) -> Option<ImageFile>
+    where
+        P: AsRef<str>,
+    {
+        let id;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let path = file.path.as_ref().unwrap().clone();
+            id = path.to_str().unwrap().to_owned();
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            id = file.name.clone();
+        }
+        let base_id = id.replace(".png", "");
+
+        let id = base_id
+            .strip_prefix(prefix.as_ref())
+            .unwrap_or(&base_id)
+            .to_owned()
+            .replace("\\", "/");
+
+        let Some(image) = dynamic_image_from_file(file) else {
+            return None;
+        };
+        Some(ImageFile { id, image })
+    }
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
-        self.error = None;
-        let mut packer = TexturePacker::new_skyline(self.config);
         let prefix = Self::get_common_prefix(&self.dropped_files);
         println!("Prefix: {}", prefix);
-        for file in &self.dropped_files {
-            let base_id = file_path(file);
-            let id = base_id
-                .strip_prefix(&prefix)
-                .unwrap_or(&base_id)
-                .to_owned()
-                .replace("\\", "/");
-            println!("Base id: {}, ID: {}", &base_id, &id);
-            let texture = dynamic_image_from_file(file);
-            let can_pack = packer.can_pack(&texture);
+        let images: Vec<ImageFile> = self
+            .dropped_files
+            .iter()
+            .flat_map(|f| Self::image_from_dropped_file(f, &prefix))
+            .collect();
 
-            if can_pack {
-                packer.pack_own(id, texture).unwrap();
-            } else {
-                self.error = Some(format!(
-                    "Consider making atlas bigger. Could not make atlas, failed on: {}",
-                    id
-                ));
-                return;
-            }
+        self.data = Some(Spritesheet::build(
+            self.config,
+            &images,
+            "name".to_owned(),
+        ));
+        if let Some(Ok(data)) = &self.data {
+            ctx.include_bytes("bytes://output.png", data.image_data.clone());
+            self.image =
+                Some(Image::from_uri("bytes://output.png").max_size(Vec2::new(256.0, 256.0)));
         }
-        for (name, frame) in packer.get_frames() {
-            println!("  {:7} : {:?}", name, frame.frame);
-        }
-        let mut out_vec = vec![];
-        let exported_image = texture_packer::exporter::ImageExporter::export(&packer).unwrap();
-        let mut img = image::DynamicImage::new_rgba8(self.config.max_width, self.config.max_height);
-        image::imageops::overlay(&mut img, &exported_image, 0, 0);
-
-        img.write_to(&mut Cursor::new(&mut out_vec), image::ImageFormat::Png)
-            .unwrap();
-        let atlas = AtlasAsset {
-            size: [img.width(), img.height()],
-            name: "Atlas".to_owned(),
-            frames: packer
-                .get_frames()
-                .values()
-                .map(|v| -> AtlasFrame {
-                    AtlasFrame {
-                        key: v.key.clone(),
-                        frame: SerializableRect {
-                            x: v.frame.x,
-                            y: v.frame.y,
-                            w: v.frame.w,
-                            h: v.frame.h,
-                        },
-                    }
-                })
-                .collect(),
-        };
-        let frames_string = serde_json::to_string_pretty(&atlas).unwrap();
-
-        let atlas_asset_json = serde_json::from_str(&frames_string).unwrap();
-        self.data = Some(Spritesheet {
-            data: out_vec.clone(),
-            frames: packer.get_frames().clone(),
-            size: (img.width(), img.height()),
-            atlas_asset_json,
-        });
-        let id = format!("bytes://output_{}.png", self.counter);
-        self.image = None;
-        ctx.forget_image(&id);
-        self.counter += 1;
-
-        let id = format!("bytes://output_{}.png", self.counter);
-        ctx.include_bytes(id.clone(), out_vec.clone());
-        self.image = Some(Image::from_uri(id.clone()).max_size(Vec2::new(256.0, 256.0)));
         ctx.request_repaint();
     }
 
     fn save_atlas(&mut self) {
-        if self.data.is_none() {
+        let Some(Ok(data)) = &self.data else {
             return;
-        }
+        };
+        let data = data.image_data.clone();
+        let filename = format!("{}.png", self.name);
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let data = self.data.clone().unwrap().data;
             use std::io::Write;
             let path_buf = rfd::FileDialog::new()
                 .set_directory(".")
                 .add_filter("Image", &["png"])
-                .set_file_name("output.png")
+                .set_file_name(filename)
                 .save_file();
             if let Some(path) = path_buf {
                 let mut file = std::fs::File::create(path).unwrap();
                 let write_result = file.write_all(&data);
                 if write_result.is_err() {
-                    self.error = Some(format!(
+                    self.data = Some(Err(format!(
                         "Could not make atlas, error: {:?}",
                         write_result.unwrap_err()
-                    ));
+                    )));
                 } else {
                     println!("Output texture stored in {:?}", file);
                 }
@@ -275,11 +159,10 @@ impl TemplateApp {
         }
         #[cfg(target_arch = "wasm32")]
         {
-            let data = self.data.clone().unwrap().data;
             wasm_bindgen_futures::spawn_local(async move {
                 let file = rfd::AsyncFileDialog::new()
                     .set_directory(".")
-                    .set_file_name("output.png")
+                    .set_file_name(filename)
                     .save_file()
                     .await;
                 match file {
@@ -378,6 +261,8 @@ impl eframe::App for TemplateApp {
                                 )
                                 .clicked()
                             {
+                                self.image = None;
+                                ctx.forget_image("bytes://output.png");
                                 self.build_atlas(ctx);
                             }
                         });
@@ -398,7 +283,7 @@ impl eframe::App for TemplateApp {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(error) = &self.error {
+            if let Some(Err(error)) = &self.data {
                 let text = egui::RichText::new(format!("Error: {}",&error))
                 .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
                 .color(Color32::RED)
@@ -413,6 +298,8 @@ impl eframe::App for TemplateApp {
                         CollapsingHeader::new("Settings")
                                 .default_open(false)
                                 .show(ui, |ui| {
+                                    ui.label("Tilemap id");
+                                    ui.text_edit_singleline(&mut self.name);
                         ui.add(
                             egui::Slider::new(&mut self.config.max_width, 64..=4096).text("Width"),
                         );
@@ -435,9 +322,9 @@ impl eframe::App for TemplateApp {
                 ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui|{
 
                 egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-                if let Some(data) = &self.data {
+                if let Some(Ok(data)) = &self.data {
                     ui.horizontal_top(|ui|{
-                        ui.label(format!("{} frames, size: {}x{}",data.frames.len(),data.size.0,data.size.1));
+                        ui.label(format!("{} frames, size: {}x{}",data.atlas_asset.frames.len(),data.atlas_asset.size[0],data.atlas_asset.size[1]));
                     });
                     ui.label(RichText::new("Frames JSON").strong());
                     egui_json_tree::JsonTree::new("simple-tree", &data.atlas_asset_json).show(ui);
@@ -506,20 +393,30 @@ fn file_path(file: &DroppedFile) -> String {
     id.replace(".png", "")
 }
 
-fn dynamic_image_from_file(file: &DroppedFile) -> DynamicImage {
+fn dynamic_image_from_file(file: &DroppedFile) -> Option<DynamicImage> {
     #[cfg(target_arch = "wasm32")]
     {
-        let bytes = file.bytes.as_ref().clone();
+        let Some(bytes) = file.bytes.as_ref().clone() else {
+            return None;
+        };
 
-        ImageImporter::import_from_memory(&bytes.unwrap())
-            .expect("Unable to import file. Run this example with --features=\"png\"")
+        if let Ok(r) = ImageImporter::import_from_memory(&bytes.unwrap()) {
+            Some(r.into())
+        } else {
+            None
+        }
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let path = file.path.as_ref().unwrap().clone();
+        let Some(path) = file.path.as_ref() else {
+            return None;
+        };
 
-        ImageImporter::import_from_file(&path)
-            .expect("Unable to import file. Run this example with --features=\"png\"")
+        if let Ok(r) = ImageImporter::import_from_file(path) {
+            Some(r)
+        } else {
+            None
+        }
     }
 }
 
