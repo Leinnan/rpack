@@ -2,7 +2,6 @@ use std::{collections::HashMap, io::Cursor};
 
 use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText, Vec2};
 use image::DynamicImage;
-
 use serde_json::Value;
 use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
@@ -11,11 +10,24 @@ pub const HEADER_HEIGHT: f32 = 45.0;
 pub const TOP_BUTTON_WIDTH: f32 = 150.0;
 pub const GIT_HASH: &str = env!("GIT_HASH");
 
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct AtlasFrame {
+    pub key: String,
+    pub frame: SerializableRect,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct AtlasAsset {
+    pub size: [u32; 2],
+    pub name: String,
+    pub frames: Vec<AtlasFrame>,
+}
+
 #[derive(Clone)]
 pub struct Spritesheet {
     pub data: Vec<u8>,
     pub frames: HashMap<String, texture_packer::Frame<String>>,
-    pub frames_json: Value,
+    pub atlas_asset_json: Value,
     pub size: (u32, u32),
 }
 
@@ -90,11 +102,6 @@ impl From<texture_packer::Rect> for SerializableRect {
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
-    // Example stuff:
-    label: String,
-
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    value: f32,
     #[serde(skip)]
     dropped_files: Vec<DroppedFile>,
     #[serde(skip)]
@@ -113,9 +120,6 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
             dropped_files: vec![],
             config: TexturePackerConfig {
                 max_width: 512,
@@ -149,12 +153,38 @@ impl TemplateApp {
 
         Default::default()
     }
+    fn get_common_prefix(paths: &[DroppedFile]) -> String {
+        if paths.is_empty() {
+            return String::new();
+        }
+        let mut prefix = file_path(&paths[0]);
+
+        for s in paths.iter().skip(1) {
+            let s = file_path(s);
+            while !s.starts_with(&prefix) {
+                prefix.pop(); // Remove the last character of the prefix
+                if prefix.is_empty() {
+                    return String::new();
+                }
+            }
+        }
+
+        prefix
+    }
+
     fn build_atlas(&mut self, ctx: &egui::Context) {
         self.error = None;
         let mut packer = TexturePacker::new_skyline(self.config);
-
+        let prefix = Self::get_common_prefix(&self.dropped_files);
+        println!("Prefix: {}", prefix);
         for file in &self.dropped_files {
-            let id = id_for_file(file);
+            let base_id = file_path(file);
+            let id = base_id
+                .strip_prefix(&prefix)
+                .unwrap_or(&base_id)
+                .to_owned()
+                .replace("\\", "/");
+            println!("Base id: {}, ID: {}", &base_id, &id);
             let texture = dynamic_image_from_file(file);
             let can_pack = packer.can_pack(&texture);
 
@@ -178,19 +208,33 @@ impl TemplateApp {
 
         img.write_to(&mut Cursor::new(&mut out_vec), image::ImageFormat::Png)
             .unwrap();
+        let atlas = AtlasAsset {
+            size: [img.width(), img.height()],
+            name: "Atlas".to_owned(),
+            frames: packer
+                .get_frames()
+                .values()
+                .map(|v| -> AtlasFrame {
+                    AtlasFrame {
+                        key: v.key.clone(),
+                        frame: SerializableRect {
+                            x: v.frame.x,
+                            y: v.frame.y,
+                            w: v.frame.w,
+                            h: v.frame.h,
+                        },
+                    }
+                })
+                .collect(),
+        };
+        let frames_string = serde_json::to_string_pretty(&atlas).unwrap();
 
-        let frames_info: Vec<SerializableFrame> = packer
-            .get_frames()
-            .values()
-            .map(|v| -> SerializableFrame { (*v).clone().into() })
-            .collect();
-        let frames_string = serde_json::to_string_pretty(&frames_info).unwrap();
-        let frames_json = serde_json::from_str(&frames_string).unwrap();
+        let atlas_asset_json = serde_json::from_str(&frames_string).unwrap();
         self.data = Some(Spritesheet {
             data: out_vec.clone(),
             frames: packer.get_frames().clone(),
             size: (img.width(), img.height()),
-            frames_json,
+            atlas_asset_json,
         });
         let id = format!("bytes://output_{}.png", self.counter);
         self.image = None;
@@ -343,9 +387,15 @@ impl eframe::App for TemplateApp {
             });
         ctx.input(|i| {
             if !i.raw.dropped_files.is_empty() {
-                self.dropped_files = i.raw.dropped_files.clone();
+                let mut extra = i.raw.dropped_files.clone();
+                self.dropped_files.append(&mut extra);
             }
         });
+        egui::TopBottomPanel::bottom("bottom_panel")
+            .frame(egui::Frame::canvas(&ctx.style()))
+            .show(ctx, |ui| {
+                powered_by_egui_and_eframe(ui);
+            });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(error) = &self.error {
@@ -390,12 +440,12 @@ impl eframe::App for TemplateApp {
                         ui.label(format!("{} frames, size: {}x{}",data.frames.len(),data.size.0,data.size.1));
                     });
                     ui.label(RichText::new("Frames JSON").strong());
-                    egui_json_tree::JsonTree::new("simple-tree", &data.frames_json).show(ui);
+                    egui_json_tree::JsonTree::new("simple-tree", &data.atlas_asset_json).show(ui);
                     if ui
                     .add(egui::Button::new("Copy JSON to Clipboard"))
                     .clicked()
                 {
-                    ui.output_mut(|o| o.copied_text = data.frames_json.to_string());
+                    ui.output_mut(|o| o.copied_text = data.atlas_asset_json.to_string());
                 };
                 }
                 ui.separator();
@@ -439,25 +489,15 @@ impl eframe::App for TemplateApp {
                 });
             }
         });
-        egui::TopBottomPanel::bottom("bottom_panel")
-            .frame(egui::Frame::canvas(&ctx.style()))
-            .show(ctx, |ui| {
-                powered_by_egui_and_eframe(ui);
-            });
     }
 }
 
-fn id_for_file(file: &DroppedFile) -> String {
+fn file_path(file: &DroppedFile) -> String {
     let id;
     #[cfg(not(target_arch = "wasm32"))]
     {
         let path = file.path.as_ref().unwrap().clone();
-        id = path
-            .file_name()
-            .unwrap()
-            .to_os_string()
-            .into_string()
-            .unwrap();
+        id = path.to_str().unwrap().to_owned();
     }
     #[cfg(target_arch = "wasm32")]
     {
