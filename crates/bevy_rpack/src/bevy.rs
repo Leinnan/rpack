@@ -72,7 +72,7 @@ pub enum RpackAtlasAssetError {
     #[error("could not load asset: {0}")]
     Io(#[from] std::io::Error),
     #[error("could not parse asset: {0}")]
-    ParsinError(#[from] serde_json::Error),
+    ParsingError(#[from] serde_json::Error),
     /// A Bevy [`LoadDirectError`](bevy::asset::LoadDirectError) that occured
     /// while loading a [`RpackAtlasAsset::image`](crate::RpackAtlasAsset::image).
     #[error("could not load asset: {0}")]
@@ -116,8 +116,8 @@ impl AssetLoader for RpackAtlasAssetLoader {
             .asset_path()
             .path()
             .parent()
-            .unwrap_or(&std::path::Path::new(""))
-            .join(asset.name);
+            .unwrap_or(std::path::Path::new(""))
+            .join(asset.filename);
 
         let mut image: Image = load_context
             .loader()

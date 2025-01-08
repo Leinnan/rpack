@@ -102,9 +102,7 @@ impl TemplateApp {
             .to_owned()
             .replace("\\", "/");
 
-        let Some(image) = dynamic_image_from_file(file) else {
-            return None;
-        };
+        let image = dynamic_image_from_file(file)?;
         Some(ImageFile { id, image })
     }
 
@@ -117,13 +115,19 @@ impl TemplateApp {
             .flat_map(|f| Self::image_from_dropped_file(f, &prefix))
             .collect();
 
-        self.data = Some(Spritesheet::build(
-            self.config,
-            &images,
-            "name".to_owned(),
-        ));
+        self.data = Some(Spritesheet::build(self.config, &images, "name"));
         if let Some(Ok(data)) = &self.data {
-            ctx.include_bytes("bytes://output.png", data.image_data.clone());
+            let mut out_vec = vec![];
+            let mut img =
+                image::DynamicImage::new_rgba8(data.atlas_asset.size[0], data.atlas_asset.size[1]);
+            image::imageops::overlay(&mut img, &data.image_data, 0, 0);
+
+            img.write_to(
+                &mut std::io::Cursor::new(&mut out_vec),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+            ctx.include_bytes("bytes://output.png", out_vec);
             self.image =
                 Some(Image::from_uri("bytes://output.png").max_size(Vec2::new(256.0, 256.0)));
         }
@@ -134,7 +138,7 @@ impl TemplateApp {
         let Some(Ok(data)) = &self.data else {
             return;
         };
-        let data = data.image_data.clone();
+        let data = data.image_data.as_bytes().to_vec();
         let filename = format!("{}.png", self.name);
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -396,9 +400,7 @@ fn file_path(file: &DroppedFile) -> String {
 fn dynamic_image_from_file(file: &DroppedFile) -> Option<DynamicImage> {
     #[cfg(target_arch = "wasm32")]
     {
-        let Some(bytes) = file.bytes.as_ref().clone() else {
-            return None;
-        };
+        let bytes = file.bytes.as_ref().clone()?;
 
         if let Ok(r) = ImageImporter::import_from_memory(&bytes.unwrap()) {
             Some(r.into())
@@ -408,9 +410,7 @@ fn dynamic_image_from_file(file: &DroppedFile) -> Option<DynamicImage> {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let Some(path) = file.path.as_ref() else {
-            return None;
-        };
+        let path = file.path.as_ref()?;
 
         if let Ok(r) = ImageImporter::import_from_file(path) {
             Some(r)

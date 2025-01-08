@@ -23,6 +23,6 @@ pub struct AtlasFrame {
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct AtlasAsset {
     pub size: [u32; 2],
-    pub name: String,
+    pub filename: String,
     pub frames: Vec<AtlasFrame>,
 }
