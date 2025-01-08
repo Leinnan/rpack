@@ -1,7 +1,6 @@
-use std::{fmt::Display, io::Write, path::Path};
-
 use clap::{Parser, ValueEnum};
 use rpack_cli::{ImageFile, Spritesheet};
+use std::{fmt::Display, io::Write, path::Path};
 
 #[derive(Clone, Debug, Default, Copy, ValueEnum)]
 pub enum SaveImageFormat {

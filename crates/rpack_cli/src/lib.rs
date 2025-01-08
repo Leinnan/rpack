@@ -92,7 +92,7 @@ impl Spritesheet {
         })
     }
 
-    #[cfg(feature = "dds")]
+    #[cfg(all(feature = "dds", not(target_arch = "wasm32")))]
     pub fn save_as_dds<R>(&self, output_path: R)
     where
         R: AsRef<str>,
@@ -112,7 +112,7 @@ impl Spritesheet {
         dds.write(&mut writer).unwrap();
     }
 
-    #[cfg(feature = "basis")]
+    #[cfg(all(feature = "basis", not(target_arch = "wasm32")))]
     pub fn save_as_basis<R>(&self, output_path: R)
     where
         R: AsRef<str>,
