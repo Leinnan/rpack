@@ -1,5 +1,7 @@
-use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText, Vec2};
-use image::DynamicImage;
+use std::{collections::HashMap, path::Path};
+
+use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText};
+use image::{DynamicImage, GenericImageView};
 use rpack_cli::{ImageFile, Spritesheet};
 use texture_packer::{importer::ImageImporter, TexturePackerConfig};
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
@@ -24,8 +26,13 @@ pub struct TemplateApp {
     counter: i32,
     #[serde(skip)]
     data: Option<Result<Spritesheet, String>>,
+    #[serde(skip)]
+    min_size: [u32; 2],
+    #[serde(skip)]
+    max_size: u32,
+    #[serde(skip)]
+    image_data: HashMap<String, ImageFile>,
 }
-
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
@@ -36,17 +43,50 @@ impl Default for TemplateApp {
                 allow_rotation: false,
                 border_padding: 2,
                 trim: false,
+                force_max_dimensions: true,
                 ..Default::default()
             },
             counter: 0,
             image: None,
             data: None,
+            max_size: 4096,
             name: String::from("Tilemap"),
+            min_size: [32, 32],
+            image_data: HashMap::new(),
         }
     }
 }
 
 impl TemplateApp {
+    pub fn rebuild_image_data(&mut self) {
+        let prefix = Self::get_common_prefix(&self.dropped_files);
+        self.image_data = self
+            .dropped_files
+            .iter()
+            .flat_map(|f| Self::image_from_dropped_file(f, &prefix))
+            .collect();
+        self.update_min_size();
+    }
+    pub fn update_min_size(&mut self) {
+        if let Some(file) = self
+            .image_data
+            .values()
+            .max_by(|a, b| a.image.width().cmp(&b.image.width()))
+        {
+            self.min_size[0] = file.image.width();
+        } else {
+            self.min_size[0] = 32;
+        }
+        if let Some(file) = self
+            .image_data
+            .values()
+            .max_by(|a, b| a.image.height().cmp(&b.image.height()))
+        {
+            self.min_size[1] = file.image.height();
+        } else {
+            self.min_size[1] = 32;
+        }
+    }
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         setup_custom_fonts(&cc.egui_ctx);
@@ -65,11 +105,19 @@ impl TemplateApp {
     fn get_common_prefix(paths: &[DroppedFile]) -> String {
         if paths.is_empty() {
             return String::new();
+        } else if paths.len() == 1 {
+            let full_name = paths[0].file_path();
+            let path = Path::new(&full_name)
+                .file_name()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or_default();
+            return full_name.strip_suffix(&path).unwrap_or_default().to_owned();
         }
-        let mut prefix = file_path(&paths[0]);
+        let mut prefix = paths[0].file_path();
 
         for s in paths.iter().skip(1) {
-            let s = file_path(s);
+            let s = s.file_path();
             while !s.starts_with(&prefix) {
                 prefix.pop(); // Remove the last character of the prefix
                 if prefix.is_empty() {
@@ -80,21 +128,12 @@ impl TemplateApp {
 
         prefix
     }
-    pub fn image_from_dropped_file<P>(file: &DroppedFile, prefix: P) -> Option<ImageFile>
+    pub fn image_from_dropped_file<P>(file: &DroppedFile, prefix: P) -> Option<(String, ImageFile)>
     where
         P: AsRef<str>,
     {
-        let id;
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let path = file.path.as_ref().unwrap().clone();
-            id = path.to_str().unwrap().to_owned();
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            id = file.name.clone();
-        }
-        let base_id = id.replace(".png", "");
+        let path = file.file_path();
+        let base_id = path.replace(".png", "");
 
         let id = base_id
             .strip_prefix(prefix.as_ref())
@@ -102,83 +141,94 @@ impl TemplateApp {
             .to_owned()
             .replace("\\", "/");
 
-        let image = dynamic_image_from_file(file)?;
-        Some(ImageFile { id, image })
+        let image: DynamicImage = dynamic_image_from_file(file)?;
+        Some((path, ImageFile { id, image }))
     }
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
-        let prefix = Self::get_common_prefix(&self.dropped_files);
-        println!("Prefix: {}", prefix);
-        let images: Vec<ImageFile> = self
-            .dropped_files
-            .iter()
-            .flat_map(|f| Self::image_from_dropped_file(f, &prefix))
-            .collect();
+        self.data = None;
+        self.image = None;
+        let images: Vec<ImageFile> = self.image_data.values().cloned().collect();
 
-        self.data = Some(Spritesheet::build(self.config, &images, "name"));
-        if let Some(Ok(data)) = &self.data {
-            let mut out_vec = vec![];
-            let mut img =
-                image::DynamicImage::new_rgba8(data.atlas_asset.size[0], data.atlas_asset.size[1]);
-            image::imageops::overlay(&mut img, &data.image_data, 0, 0);
-
-            img.write_to(
-                &mut std::io::Cursor::new(&mut out_vec),
-                image::ImageFormat::Png,
-            )
-            .unwrap();
-            ctx.include_bytes("bytes://output.png", out_vec);
-            self.image =
-                Some(Image::from_uri("bytes://output.png").max_size(Vec2::new(256.0, 256.0)));
+        for size in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
+            if size < self.min_size[0] || size < self.min_size[1] {
+                continue;
+            }
+            if size > self.max_size {
+                break;
+            }
+            let config = TexturePackerConfig {
+                max_width: size,
+                max_height: size,
+                ..self.config
+            };
+            self.data = Some(Spritesheet::build(
+                config,
+                &images,
+                format!("{}.png", &self.name),
+            ));
+            if let Some(Ok(data)) = &self.data {
+                let mut out_vec = vec![];
+                data.image_data
+                    .write_to(
+                        &mut std::io::Cursor::new(&mut out_vec),
+                        image::ImageFormat::Png,
+                    )
+                    .unwrap();
+                ctx.include_bytes("bytes://output.png", out_vec);
+                self.image = Some(Image::from_uri("bytes://output.png"));
+                break;
+            }
         }
         ctx.request_repaint();
     }
 
-    fn save_atlas(&mut self) {
-        let Some(Ok(data)) = &self.data else {
-            return;
+    fn save_atlas(&self) -> Result<(), String> {
+        let Some(Ok(spritesheet)) = &self.data else {
+            return Err("Data is incorrect".to_owned());
         };
-        let data = data.image_data.as_bytes().to_vec();
         let filename = format!("{}.png", self.name);
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use std::io::Write;
             let path_buf = rfd::FileDialog::new()
                 .set_directory(".")
-                .add_filter("Image", &["png"])
+                .add_filter("png", &["png"])
                 .set_file_name(filename)
                 .save_file();
             if let Some(path) = path_buf {
-                let mut file = std::fs::File::create(path).unwrap();
-                let write_result = file.write_all(&data);
+                let write_result = spritesheet
+                    .image_data
+                    .save_with_format(path, image::ImageFormat::Png);
                 if write_result.is_err() {
-                    self.data = Some(Err(format!(
+                    return Err(format!(
                         "Could not make atlas, error: {:?}",
                         write_result.unwrap_err()
-                    )));
-                } else {
-                    println!("Output texture stored in {:?}", file);
+                    ));
                 }
             }
         }
         #[cfg(target_arch = "wasm32")]
         {
+            let mut data = vec![];
+            let Ok(()) = spritesheet.image_data.write_to(
+                &mut std::io::Cursor::new(&mut data),
+                image::ImageFormat::Png,
+            ) else {
+                return Err("Failed to copy data".to_owned());
+            };
             wasm_bindgen_futures::spawn_local(async move {
-                let file = rfd::AsyncFileDialog::new()
+                let Some(file) = rfd::AsyncFileDialog::new()
                     .set_directory(".")
                     .set_file_name(filename)
                     .save_file()
-                    .await;
-                match file {
-                    None => (),
-                    Some(file) => {
-                        // let module = serde_yaml::to_string(&module).unwrap();
-                        // TODO: error handling
-                        file.write(&data).await.unwrap();
-                    }
-                }
+                    .await
+                else {
+                    return;
+                };
+                file.write(&data).await.unwrap();
             });
         }
+        Ok(())
     }
 }
 
@@ -235,49 +285,21 @@ impl eframe::App for TemplateApp {
         egui::TopBottomPanel::top("topPanel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
-                ui.with_layout(
-                    egui::Layout::left_to_right(egui::Align::Center)
-                        .with_cross_align(eframe::emath::Align::Center),
-                    |ui| {
-                        let text = egui::RichText::new("rPack")
-                            .font(FontId::new(26.0, FontFamily::Name("semibold".into())))
-                            .color(MY_ACCENT_COLOR32)
-                            .strong();
-                        ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, HEADER_HEIGHT));
-                        ui.add(egui::Label::new(text));
-                        let available_width =
-                            ui.available_width() - ((TOP_BUTTON_WIDTH - TOP_SIDE_MARGIN) * 3.0);
-                        ui.allocate_space(egui::vec2(available_width, HEADER_HEIGHT));
-                        ui.add_enabled_ui(self.data.is_some(), |ui| {
-                            if ui
-                                .add_sized([TOP_BUTTON_WIDTH, 30.0], egui::Button::new("Save"))
-                                .clicked()
-                            {
-                                self.save_atlas();
-                            }
-                        });
-                        ui.add_enabled_ui(!self.dropped_files.is_empty(), |ui| {
-                            ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, 10.0));
-                            if ui
-                                .add_sized(
-                                    [TOP_BUTTON_WIDTH, 30.0],
-                                    egui::Button::new("Build atlas"),
-                                )
-                                .clicked()
-                            {
-                                self.image = None;
-                                ctx.forget_image("bytes://output.png");
-                                self.build_atlas(ctx);
-                            }
-                        });
-                        ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, 10.0));
-                    },
-                );
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    let text = egui::RichText::new("rPack")
+                        .font(FontId::new(26.0, FontFamily::Name("semibold".into())))
+                        .color(MY_ACCENT_COLOR32)
+                        .strong();
+                    ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, HEADER_HEIGHT));
+                    ui.add(egui::Label::new(text));
+                });
             });
         ctx.input(|i| {
             if !i.raw.dropped_files.is_empty() {
                 let mut extra = i.raw.dropped_files.clone();
                 self.dropped_files.append(&mut extra);
+                self.data = None;
+                self.rebuild_image_data();
             }
         });
         egui::TopBottomPanel::bottom("bottom_panel")
@@ -285,116 +307,197 @@ impl eframe::App for TemplateApp {
             .show(ctx, |ui| {
                 powered_by_egui_and_eframe(ui);
             });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(Err(error)) = &self.data {
-                let text = egui::RichText::new(format!("Error: {}",&error))
-                .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
-                .color(Color32::RED)
-                .strong();
-                ui.add(egui::Label::new(text));
-            }
-            if !self.dropped_files.is_empty() {
-                ui.horizontal_top(|ui|{
-                        if let Some(image) = &self.image {
-                            ui.add(image.clone());
-                        }
-                        CollapsingHeader::new("Settings")
-                                .default_open(false)
-                                .show(ui, |ui| {
-                                    ui.label("Tilemap id");
-                                    ui.text_edit_singleline(&mut self.name);
-                        ui.add(
-                            egui::Slider::new(&mut self.config.max_width, 64..=4096).text("Width"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.config.max_height, 64..=4096).text("Height"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.config.border_padding, 0..=10).text("Border Padding"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.config.texture_padding, 0..=10).text("Texture Padding"),
-                        );
-                        ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
-                        .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
-                        ui.checkbox(&mut self.config.texture_outlines, "Texture Outlines")
-                        .on_hover_text("True to draw the red line on the edge of the each frames. Useful for debugging.");
-                        ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
-                                });
-                });
-                ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui|{
-
-                egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-                if let Some(Ok(data)) = &self.data {
-                    ui.horizontal_top(|ui|{
-                        ui.label(format!("{} frames, size: {}x{}",data.atlas_asset.frames.len(),data.atlas_asset.size[0],data.atlas_asset.size[1]));
-                    });
-                    ui.label(RichText::new("Frames JSON").strong());
-                    egui_json_tree::JsonTree::new("simple-tree", &data.atlas_asset_json).show(ui);
-                    if ui
-                    .add(egui::Button::new("Copy JSON to Clipboard"))
-                    .clicked()
-                {
-                    ui.output_mut(|o| o.copied_text = data.atlas_asset_json.to_string());
-                };
-                }
-                ui.separator();
-                    let mut index_to_remove : Option<usize> = None;
-                    for (i, file) in self.dropped_files.iter().enumerate() {
-                        let mut info = if let Some(path) = &file.path {
-                            path.display().to_string()
-                        } else if !file.name.is_empty() {
-                            file.name.clone()
-                        } else {
-                            "???".to_owned()
-                        };
-                        if let Some(bytes) = &file.bytes {
-                            info += &format!(" ({} bytes)", bytes.len());
-                        }
-                        ui.horizontal_top(|ui|{
-                            if ui.button("x").clicked(){
-                                index_to_remove = Some(i);
-                            }
+        egui::SidePanel::right("leftPanel")
+            .min_width(200.0)
+            .frame(egui::Frame::canvas(&ctx.style()))
+            .show_animated(ctx, !self.image_data.is_empty(), |ui| {
+                CollapsingHeader::new("Settings")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.vertical_centered_justified(|ui|{
+                                let label = ui.label("Tilemap filename");
+                                ui.text_edit_singleline(&mut self.name).labelled_by(label.id);
+                                ui.add_space(10.0);
+                            ui.add(
+                                egui::Slider::new(&mut self.max_size, self.min_size[0]..=4096)
+                                .step_by(32.0)
+                                    .text("Max size"),
+                            );
+                            ui.add(
+                                egui::Slider::new(&mut self.config.border_padding, 0..=10)
+                                    .text("Border Padding"),
+                            );
+                            ui.add(
+                                egui::Slider::new(&mut self.config.texture_padding, 0..=10)
+                                    .text("Texture Padding"),
+                            );
+                            // ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
+                            // .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
+                            ui.checkbox(&mut self.config.texture_outlines, "Texture Outlines")
+            .on_hover_text("Draw the red line on the edge of the each frames. Useful for debugging.");
+                            // ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
                             ui.add_space(10.0);
-                            ui.label(info);
+
+                            ui.add_enabled_ui(!self.dropped_files.is_empty(), |ui| {
+                                    if ui
+                                    .add_sized([TOP_BUTTON_WIDTH, 30.0], egui::Button::new("Build atlas"))
+                                    .clicked()
+                                    {
+                                        self.image = None;
+                                        ctx.forget_image("bytes://output.png");
+                                        self.build_atlas(ctx);
+                                    }
+                                    ui.add_space(10.0);
+
+                                });
+                            });
+                    });
+                ui.separator();
+                CollapsingHeader::new("Image list")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if !self.image_data.is_empty() && ui.button("clear list").clicked() {
+                            self.image_data.clear();
+                            self.dropped_files.clear();
+                            self.data = None;
+                            self.update_min_size();
+                        }
+                        let mut to_remove: Option<String> = None;
+                        for (id, file) in self.image_data.iter() {
+                            ui.horizontal_top(|ui| {
+                                ui.add_space(10.0);
+                                if ui.button("x").clicked() {
+                                    to_remove = Some(id.clone());
+                                }
+                                ui.add_space(10.0);
+                                let (x, y) = file.image.dimensions();
+                                ui.label(&file.id)
+                                    .on_hover_text(format!("Dimensions: {}x{}", x, y));
+                            });
+                        }
+                        if let Some(index) = to_remove {
+                            if let Some(i) = self
+                                .dropped_files
+                                .iter()
+                                .position(|e| e.file_path().eq(&index))
+                            {
+                                self.dropped_files.remove(i);
+                                self.image_data.remove(&index);
+                                self.data = None;
+                                self.rebuild_image_data();
+                            }
+                        }
+                    });
+            });
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("vertical_scroll")
+                .show(ui, |ui| {
+                    if let Some(Err(error)) = &self.data {
+                        let text = egui::RichText::new(format!("Error: {}", &error))
+                            .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
+                            .color(Color32::RED)
+                            .strong();
+                        ui.add(egui::Label::new(text));
+                        return;
+                    }
+                    if self.dropped_files.is_empty() {
+                        ui.vertical_centered_justified(|ui| {
+                            ui.add_space(50.0);
+                            ui.label(
+                                RichText::new("Drop files here")
+                                    .heading()
+                                    .color(MY_ACCENT_COLOR32),
+                            );
                         });
                     }
-                    if let Some(index) = index_to_remove{
-                        self.dropped_files.remove(index);
-                    }
+                    let Some(image) = &self.image else {
+                        return;
+                    };
+                    let Some(Ok(data)) = &self.data else {
+                        return;
+                    };
+                    ui.vertical_centered_justified(|ui| {
+                        egui::Frame::canvas(&ctx.style()).show(ui, |ui| {
+                            ui.add_space(10.0);
+                            ui.heading(
+                                egui::RichText::new("Crated atlas").color(MY_ACCENT_COLOR32),
+                            );
+                            ui.add_space(10.0);
+                            ui.label(format!(
+                                "{} sprites\nsize: {}x{}",
+                                data.atlas_asset.frames.len(),
+                                data.atlas_asset.size[0],
+                                data.atlas_asset.size[1]
+                            ));
+                            ui.add_space(10.0);
+                            ui.add_enabled_ui(self.data.is_some(), |ui| {
+                                if ui
+                                    .add_sized(
+                                        [TOP_BUTTON_WIDTH, 30.0],
+                                        egui::Button::new("Save atlas image"),
+                                    )
+                                    .clicked()
+                                {
+                                    if let Err(error) = self.save_atlas() {
+                                        eprintln!("ERROR: {}", error);
+                                    }
+                                }
+                            });
+                            ui.add_space(10.0);
+                            CollapsingHeader::new("Atlas JSON")
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    ui.vertical_centered_justified(|ui| {
+                                        if ui
+                                            .add(egui::Button::new("Copy JSON to Clipboard"))
+                                            .clicked()
+                                        {
+                                            ui.output_mut(|o| {
+                                                o.copied_text = data.atlas_asset_json.to_string()
+                                            });
+                                        };
+                                        ui.add_space(10.0);
+                                        ui.label(RichText::new("Frames JSON").strong());
+                                        ui.add_space(10.0);
+                                        egui_json_tree::JsonTree::new(
+                                            "simple-tree",
+                                            &data.atlas_asset_json,
+                                        )
+                                        .show(ui);
+                                    });
+                                });
+                            ui.add_space(10.0);
+                            ui.separator();
+                            ui.add(image.clone());
+                            ui.separator();
+                            ui.add_space(10.0);
+                            ui.add_space(10.0);
+                        });
+                    });
                 });
-                if ui.button("clear list").clicked() {
-                    self.dropped_files.clear();
-                }
-                });
-            } else {
-                ui.vertical_centered_justified(|ui|{
-                    ui.add_space(50.0);
-                    ui.label(
-                        RichText::new("Drop files here")
-                            .heading()
-                            .color(MY_ACCENT_COLOR32),
-                    );
-
-                });
-            }
         });
     }
 }
 
-fn file_path(file: &DroppedFile) -> String {
-    let id;
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let path = file.path.as_ref().unwrap().clone();
-        id = path.to_str().unwrap().to_owned();
+trait FilePath {
+    fn file_path(&self) -> String;
+}
+
+impl FilePath for DroppedFile {
+    fn file_path(&self) -> String {
+        let id;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let path = self.path.as_ref().unwrap().clone();
+            id = path.to_str().unwrap().to_owned();
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            id = self.name.clone();
+        }
+        id.replace(".png", "")
     }
-    #[cfg(target_arch = "wasm32")]
-    {
-        id = file.name.clone();
-    }
-    id.replace(".png", "")
 }
 
 fn dynamic_image_from_file(file: &DroppedFile) -> Option<DynamicImage> {

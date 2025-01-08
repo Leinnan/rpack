@@ -54,6 +54,17 @@ impl RpackAtlasAsset {
     }
 }
 
+/// Plugin that provides support for rpack atlases.
+///
+/// # Example
+/// ```no_run
+/// use bevy::prelude::*;
+/// use bevy_rpack::prelude::*;
+///
+/// App::new()
+///     .add_plugins((DefaultPlugins,RpackAssetPlugin))
+///     .run();
+/// ```
 pub struct RpackAssetPlugin;
 
 impl Plugin for RpackAssetPlugin {

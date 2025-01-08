@@ -1,5 +1,11 @@
 #[cfg(feature = "bevy")]
-pub mod bevy;
+mod bevy;
+
+pub mod prelude {
+    pub use super::{AtlasAsset,SerializableRect, AtlasFrame};
+    #[cfg(feature = "bevy")]
+    pub use super::bevy::{RpackAssetPlugin, RpackAtlasAsset, RpackAtlasAssetError, RpackAtlasAssetLoader};
+}
 
 /// Defines a rectangle in pixels with the origin at the top-left of the texture atlas.
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
