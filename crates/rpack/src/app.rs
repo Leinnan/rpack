@@ -402,7 +402,7 @@ fn dynamic_image_from_file(file: &DroppedFile) -> Option<DynamicImage> {
     {
         let bytes = file.bytes.as_ref().clone()?;
 
-        if let Ok(r) = ImageImporter::import_from_memory(&bytes.unwrap()) {
+        if let Ok(r) = ImageImporter::import_from_memory(bytes) {
             Some(r.into())
         } else {
             None
