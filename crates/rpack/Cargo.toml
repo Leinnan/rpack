@@ -27,6 +27,7 @@ image = { version = "0.25", features = ["jpeg", "png"] }
 egui_extras = { version = "*", features = ["all_loaders"] }
 rfd = { version = "0.15", features = [] }
 wasm-bindgen-futures = "0.4"
+anyhow = "1"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

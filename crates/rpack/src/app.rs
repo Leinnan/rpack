@@ -89,7 +89,7 @@ impl TemplateApp {
     }
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        setup_custom_fonts(&cc.egui_ctx);
+        crate::fonts::setup_custom_fonts(&cc.egui_ctx);
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
         egui_extras::install_image_loaders(&cc.egui_ctx);
@@ -230,44 +230,6 @@ impl TemplateApp {
         }
         Ok(())
     }
-}
-
-fn setup_custom_fonts(ctx: &egui::Context) {
-    // Start with the default fonts (we will be adding to them rather than replacing them).
-    let mut fonts = egui::FontDefinitions::default();
-
-    // Install my own font (maybe supporting non-latin characters).
-    // .ttf and .otf files supported.
-    fonts.font_data.insert(
-        "regular".to_owned(),
-        egui::FontData::from_static(include_bytes!("../static/JetBrainsMonoNL-Regular.ttf")).into(),
-    );
-    fonts.font_data.insert(
-        "semibold".to_owned(),
-        egui::FontData::from_static(include_bytes!("../static/JetBrainsMono-SemiBold.ttf")).into(),
-    );
-
-    // Put my font first (highest priority) for proportional text:
-    fonts
-        .families
-        .entry(egui::FontFamily::Proportional)
-        .or_default()
-        .insert(0, "regular".to_owned());
-    fonts
-        .families
-        .entry(egui::FontFamily::Name("semibold".into()))
-        .or_default()
-        .insert(0, "semibold".to_owned());
-
-    // Put my font as last fallback for monospace:
-    fonts
-        .families
-        .entry(egui::FontFamily::Monospace)
-        .or_default()
-        .push("regular".to_owned());
-
-    // Tell egui to use these fonts:
-    ctx.set_fonts(fonts);
 }
 
 impl eframe::App for TemplateApp {

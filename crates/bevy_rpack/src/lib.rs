@@ -2,9 +2,11 @@
 mod bevy;
 
 pub mod prelude {
-    pub use super::{AtlasAsset,SerializableRect, AtlasFrame};
     #[cfg(feature = "bevy")]
-    pub use super::bevy::{RpackAssetPlugin, RpackAtlasAsset, RpackAtlasAssetError, RpackAtlasAssetLoader};
+    pub use super::bevy::{
+        RpackAssetPlugin, RpackAtlasAsset, RpackAtlasAssetError, RpackAtlasAssetLoader,
+    };
+    pub use super::{AtlasAsset, AtlasFrame, SerializableRect};
 }
 
 /// Defines a rectangle in pixels with the origin at the top-left of the texture atlas.
