@@ -9,4 +9,4 @@ Create spritesheets in seconds!
 
 Attempt to build texture atlas packer GUI.
 
-![rpack_p9ayUcVnzY](https://github.com/Leinnan/rpack/assets/13188195/289fb455-8ff0-4cbf-8830-b3be773b6a42)
+![rpack_ebVVrMf3wm](https://github.com/user-attachments/assets/bb015348-3c1f-46be-9312-963b4f39f9c0)
