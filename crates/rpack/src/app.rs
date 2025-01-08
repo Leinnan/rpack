@@ -367,7 +367,7 @@ impl eframe::App for TemplateApp {
                         ui.vertical_centered_justified(|ui| {
                             ui.add_space(50.0);
                             ui.label(
-                                RichText::new("Drop files here")
+                                RichText::new("Drop images here first")
                                     .heading()
                                     .color(MY_ACCENT_COLOR32),
                             );
