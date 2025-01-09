@@ -178,7 +178,7 @@ impl Application {
                 else {
                     return;
                 };
-                file.write(&data).await.unwrap();
+                file.write(data.as_bytes()).await.unwrap();
             });
         }
         Ok(())
