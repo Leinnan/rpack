@@ -15,7 +15,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "rPack",
         native_options,
-        Box::new(|cc| Ok(Box::new(rpack::TemplateApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(rpack::Application::new(cc)))),
     )
 }
 
@@ -40,7 +40,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(rpack::TemplateApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(rpack::Application::new(cc)))),
             )
             .await;
 

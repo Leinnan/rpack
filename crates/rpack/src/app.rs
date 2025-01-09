@@ -1,9 +1,11 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText};
-use image::{DynamicImage, GenericImageView};
+use image::GenericImageView;
 use rpack_cli::{ImageFile, Spritesheet};
-use texture_packer::{importer::ImageImporter, TexturePackerConfig};
+use texture_packer::TexturePackerConfig;
+
+use crate::helpers::DroppedFileHelper;
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const TOP_SIDE_MARGIN: f32 = 10.0;
 pub const HEADER_HEIGHT: f32 = 45.0;
@@ -13,7 +15,7 @@ pub const GIT_HASH: &str = env!("GIT_HASH");
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
-pub struct TemplateApp {
+pub struct Application {
     #[serde(skip)]
     dropped_files: Vec<DroppedFile>,
     #[serde(skip)]
@@ -33,7 +35,7 @@ pub struct TemplateApp {
     #[serde(skip)]
     image_data: HashMap<String, ImageFile>,
 }
-impl Default for TemplateApp {
+impl Default for Application {
     fn default() -> Self {
         Self {
             dropped_files: vec![],
@@ -57,13 +59,14 @@ impl Default for TemplateApp {
     }
 }
 
-impl TemplateApp {
+impl Application {
     pub fn rebuild_image_data(&mut self) {
-        let prefix = Self::get_common_prefix(&self.dropped_files);
+        let prefix = crate::helpers::get_common_prefix(&self.dropped_files);
+
         self.image_data = self
             .dropped_files
             .iter()
-            .flat_map(|f| Self::image_from_dropped_file(f, &prefix))
+            .flat_map(|f| f.create_image(&prefix))
             .collect();
         self.update_min_size();
     }
@@ -101,48 +104,6 @@ impl TemplateApp {
         }
 
         Default::default()
-    }
-    fn get_common_prefix(paths: &[DroppedFile]) -> String {
-        if paths.is_empty() {
-            return String::new();
-        } else if paths.len() == 1 {
-            let full_name = paths[0].file_path();
-            let path = Path::new(&full_name)
-                .file_name()
-                .unwrap_or_default()
-                .to_str()
-                .unwrap_or_default();
-            return full_name.strip_suffix(&path).unwrap_or_default().to_owned();
-        }
-        let mut prefix = paths[0].file_path();
-
-        for s in paths.iter().skip(1) {
-            let s = s.file_path();
-            while !s.starts_with(&prefix) {
-                prefix.pop(); // Remove the last character of the prefix
-                if prefix.is_empty() {
-                    return String::new();
-                }
-            }
-        }
-
-        prefix
-    }
-    pub fn image_from_dropped_file<P>(file: &DroppedFile, prefix: P) -> Option<(String, ImageFile)>
-    where
-        P: AsRef<str>,
-    {
-        let path = file.file_path();
-        let base_id = path.replace(".png", "");
-
-        let id = base_id
-            .strip_prefix(prefix.as_ref())
-            .unwrap_or(&base_id)
-            .to_owned()
-            .replace("\\", "/");
-
-        let image: DynamicImage = dynamic_image_from_file(file)?;
-        Some((path, ImageFile { id, image }))
     }
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
@@ -232,7 +193,7 @@ impl TemplateApp {
     }
 }
 
-impl eframe::App for TemplateApp {
+impl eframe::App for Application {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
@@ -273,6 +234,10 @@ impl eframe::App for TemplateApp {
             .min_width(200.0)
             .frame(egui::Frame::canvas(&ctx.style()))
             .show_animated(ctx, !self.image_data.is_empty(), |ui| {
+
+            egui::ScrollArea::vertical()
+            .id_salt("leftPanel_scroll")
+            .show(ui, |ui| {
                 CollapsingHeader::new("Settings")
                     .default_open(true)
                     .show(ui, |ui| {
@@ -350,6 +315,7 @@ impl eframe::App for TemplateApp {
                             }
                         }
                     });
+                });
             });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical()
@@ -415,8 +381,10 @@ impl eframe::App for TemplateApp {
                                             .add(egui::Button::new("Copy JSON to Clipboard"))
                                             .clicked()
                                         {
+                                            let s = data.atlas_asset_json.to_string();
+                                            println!("JSON: {s}");
                                             ui.output_mut(|o| {
-                                                o.copied_text = data.atlas_asset_json.to_string()
+                                                o.copied_text = s;
                                             });
                                         };
                                         ui.add_space(10.0);
@@ -439,49 +407,6 @@ impl eframe::App for TemplateApp {
                     });
                 });
         });
-    }
-}
-
-trait FilePath {
-    fn file_path(&self) -> String;
-}
-
-impl FilePath for DroppedFile {
-    fn file_path(&self) -> String {
-        let id;
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let path = self.path.as_ref().unwrap().clone();
-            id = path.to_str().unwrap().to_owned();
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            id = self.name.clone();
-        }
-        id.replace(".png", "")
-    }
-}
-
-fn dynamic_image_from_file(file: &DroppedFile) -> Option<DynamicImage> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let bytes = file.bytes.as_ref().clone()?;
-
-        if let Ok(r) = ImageImporter::import_from_memory(bytes) {
-            Some(r.into())
-        } else {
-            None
-        }
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let path = file.path.as_ref()?;
-
-        if let Ok(r) = ImageImporter::import_from_file(path) {
-            Some(r)
-        } else {
-            None
-        }
     }
 }
 

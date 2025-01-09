@@ -2,4 +2,5 @@
 
 mod app;
 mod fonts;
-pub use app::TemplateApp;
+mod helpers;
+pub use app::Application;

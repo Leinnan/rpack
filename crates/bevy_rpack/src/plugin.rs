@@ -4,6 +4,17 @@ use bevy::image::ImageSampler;
 use bevy::{prelude::*, utils::HashMap};
 use thiserror::Error;
 
+/// Errors that can occur while accessing and creating components from [`RpackAtlasAsset`].
+#[derive(Debug, Error)]
+pub enum RpackAtlasError {
+    /// An error that occured due to no atlas being loaded yet
+    #[error("There is no atlas.")]
+    NoAtlas,
+    /// An error that occured because atlas does not contain provided key.
+    #[error("There is no frame with provided key.")]
+    WrongKey,
+}
+
 /// This is an asset containing the texture atlas image, the texture atlas layout, and a map of the original file names to their corresponding indices in the texture atlas.
 #[derive(Asset, Debug, Reflect)]
 pub struct RpackAtlasAsset {
@@ -27,29 +38,100 @@ impl From<SerializableRect> for URect {
     }
 }
 
-impl RpackAtlasAsset {
-    // When atlas contains the given key returns a copy of TextureAtlas and Image
-    pub fn get_atlas_data<T: AsRef<str>>(&self, key: T) -> Option<(TextureAtlas, Handle<Image>)> {
-        self.files.get(key.as_ref()).map(|s| {
-            (
+/// A helper trait for accessing and creating components from `Rpack` atlas data.
+#[allow(dead_code)]
+pub trait RpackAssetHelper {
+    /// Retrieves the atlas data (texture atlas and image) for the given atlas key, if available in any of the loaded Atlases.
+    fn find_atlas_data_by_key<T: AsRef<str>>(
+        &self,
+        key: T,
+    ) -> Result<(TextureAtlas, Handle<Image>), RpackAtlasError>;
+    /// Creates a [`Sprite`] component for the given atlas key, if available in any of the loaded Atlases.
+    fn make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError>;
+    /// Creates a [`ImageNode`] component for the given atlas key, if available in any of the loaded Atlases.
+    fn make_image_node_from_atlas<T: AsRef<str>>(
+        &self,
+        key: T,
+    ) -> Result<ImageNode, RpackAtlasError>;
+}
+
+impl RpackAssetHelper for Assets<RpackAtlasAsset> {
+    fn find_atlas_data_by_key<T: AsRef<str>>(
+        &self,
+        key: T,
+    ) -> Result<(TextureAtlas, Handle<Image>), RpackAtlasError> {
+        if self.is_empty() {
+            return Err(RpackAtlasError::NoAtlas);
+        }
+        for (_, a) in self.iter() {
+            if let Ok(atlas_data) = a.find_atlas_data_by_key(key.as_ref()) {
+                return Ok(atlas_data);
+            }
+        }
+        Err(RpackAtlasError::WrongKey)
+    }
+
+    fn make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError> {
+        if self.is_empty() {
+            return Err(RpackAtlasError::NoAtlas);
+        }
+        for (_, a) in self.iter() {
+            if let Ok(sprite) = a.make_sprite_from_atlas(key.as_ref()) {
+                return Ok(sprite);
+            }
+        }
+        Err(RpackAtlasError::WrongKey)
+    }
+
+    fn make_image_node_from_atlas<T: AsRef<str>>(
+        &self,
+        key: T,
+    ) -> Result<ImageNode, RpackAtlasError> {
+        if self.is_empty() {
+            return Err(RpackAtlasError::NoAtlas);
+        }
+        for (_, a) in self.iter() {
+            if let Ok(image_node) = a.make_image_node_from_atlas(key.as_ref()) {
+                return Ok(image_node);
+            }
+        }
+        Err(RpackAtlasError::WrongKey)
+    }
+}
+
+impl RpackAssetHelper for RpackAtlasAsset {
+    fn find_atlas_data_by_key<T: AsRef<str>>(
+        &self,
+        key: T,
+    ) -> Result<(TextureAtlas, Handle<Image>), RpackAtlasError> {
+        match self.files.get(key.as_ref()) {
+            Some(s) => Ok((
                 TextureAtlas {
                     index: *s,
                     layout: self.atlas.clone(),
                 },
                 self.image.clone(),
-            )
-        })
+            )),
+            None => Err(RpackAtlasError::WrongKey),
+        }
     }
-    // When atlas contains the given key creates a Sprite component
-    pub fn make_sprite<T: AsRef<str>>(&self, key: T) -> Option<Sprite> {
-        if let Some((atlas, image)) = self.get_atlas_data(key) {
-            Some(Sprite {
-                image,
-                texture_atlas: Some(atlas),
-                ..Default::default()
-            })
+
+    fn make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError> {
+        if let Ok((atlas, image)) = self.find_atlas_data_by_key(key) {
+            Ok(Sprite::from_atlas_image(image, atlas))
         } else {
-            None
+            Err(RpackAtlasError::WrongKey)
+        }
+    }
+
+    fn make_image_node_from_atlas<T: AsRef<str>>(
+        &self,
+        key: T,
+    ) -> Result<ImageNode, RpackAtlasError> {
+        if let Ok((atlas, image)) = self.find_atlas_data_by_key(key) {
+            Ok(ImageNode::from_atlas_image(image, atlas))
+        } else {
+            Err(RpackAtlasError::WrongKey)
         }
     }
 }
@@ -69,12 +151,14 @@ pub struct RpackAssetPlugin;
 
 impl Plugin for RpackAssetPlugin {
     fn build(&self, app: &mut App) {
+        app.register_type::<super::AtlasAsset>();
         app.register_type::<RpackAtlasAsset>();
         app.init_asset::<RpackAtlasAsset>();
         app.init_asset_loader::<RpackAtlasAssetLoader>();
     }
 }
 
+/// Errors that can occur while loading or processing a `RpackAtlasAsset`.
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum RpackAtlasAssetError {
@@ -82,6 +166,7 @@ pub enum RpackAtlasAssetError {
     /// during parsing of a `.rpack.json` file.
     #[error("could not load asset: {0}")]
     Io(#[from] std::io::Error),
+    /// An error that occurred while parsing the `.rpack.json` file into an asset structure.
     #[error("could not parse asset: {0}")]
     ParsingError(#[from] serde_json::Error),
     /// A Bevy [`LoadDirectError`](bevy::asset::LoadDirectError) that occured
@@ -101,6 +186,7 @@ impl From<bevy::asset::LoadDirectError> for RpackAtlasAssetError {
     }
 }
 
+/// The loader responsible for loading `RpackAtlasAsset` files from `.rpack.json` files.
 #[derive(Default)]
 pub struct RpackAtlasAssetLoader;
 
