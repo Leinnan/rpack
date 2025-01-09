@@ -35,6 +35,7 @@ pub fn setup_custom_fonts(ctx: &egui::Context) {
     // Tell egui to use these fonts:
     ctx.set_fonts(fonts);
 
+    #[cfg(not(target_arch = "wasm32"))]
     ctx.style_mut(|style| {
         for font_id in style.text_styles.values_mut() {
             font_id.size *= 1.4;
