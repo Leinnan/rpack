@@ -1,6 +1,8 @@
 # rpack [![Build Status](https://github.com/Leinnan/rpack/workflows/CI/badge.svg)](https://github.com/Leinnan/rpack/actions?workflow=CI)
 
-Create spritesheets in seconds!
+Create tilemaps in seconds!
+
+This repository contains few projects that together make a fully functional solution for generating tilemaps alongside integration to the Bevy game engine.
 
 ## rPack egui
 
@@ -20,6 +22,8 @@ Source code is available in `crates/rpack` directory of the repo.
 A Bevy plugin with support for the `rpack.json` atlases.
 
 More info available at [crates/bevy_rpack](https://github.com/Leinnan/rpack/tree/master/crates/bevy_rpack).
+
+Repository contains example how to use plugin in Bevy.
 
 ## rPack CLI
 
