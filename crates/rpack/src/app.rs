@@ -144,6 +144,46 @@ impl Application {
         ctx.request_repaint();
     }
 
+    fn save_json(&self) -> Result<(), String> {
+        let Some(Ok(spritesheet)) = &self.data else {
+            return Err("Data is incorrect".to_owned());
+        };
+        let data = spritesheet.atlas_asset_json.to_string();
+        let filename = format!("{}.rpack.json", self.name);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let path_buf = rfd::FileDialog::new()
+                .set_directory(".")
+                .add_filter(".rpack.json", &["rpack.json"])
+                .set_file_name(filename)
+                .save_file();
+            if let Some(path) = path_buf {
+                let write_result = std::fs::write(path, &data);
+                if write_result.is_err() {
+                    return Err(format!(
+                        "Could not save json atlas, error: {:?}",
+                        write_result.unwrap_err()
+                    ));
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            wasm_bindgen_futures::spawn_local(async move {
+                let Some(file) = rfd::AsyncFileDialog::new()
+                    .set_directory(".")
+                    .set_file_name(filename)
+                    .save_file()
+                    .await
+                else {
+                    return;
+                };
+                file.write(&data).await.unwrap();
+            });
+        }
+        Ok(())
+    }
+
     fn save_atlas(&self) -> Result<(), String> {
         let Some(Ok(spritesheet)) = &self.data else {
             return Err("Data is incorrect".to_owned());
@@ -359,42 +399,52 @@ impl eframe::App for Application {
                                 data.atlas_asset.size[1]
                             ));
                             ui.add_space(10.0);
-                            ui.add_enabled_ui(self.data.is_some(), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                let width = (ui.available_width() - 30.0).max(1.0) / 2.0;
+                                ui.add_space(10.0);
                                 if ui
-                                    .add_sized(
-                                        [TOP_BUTTON_WIDTH, 30.0],
-                                        egui::Button::new("Save atlas image"),
-                                    )
+                                    .add_sized([width, 35.0], egui::Button::new("Save atlas image"))
                                     .clicked()
                                 {
                                     if let Err(error) = self.save_atlas() {
                                         eprintln!("ERROR: {}", error);
                                     }
                                 }
+                                ui.add_space(10.0);
+                                if ui
+                                    .add_sized([width, 35.0], egui::Button::new("Save atlas json"))
+                                    .clicked()
+                                {
+                                    if let Err(error) = self.save_json() {
+                                        eprintln!("ERROR: {}", error);
+                                    }
+                                }
+                                ui.add_space(10.0);
                             });
                             ui.add_space(10.0);
                             CollapsingHeader::new("Atlas JSON")
                                 .default_open(true)
                                 .show(ui, |ui| {
                                     ui.vertical_centered_justified(|ui| {
-                                        if ui
-                                            .add(egui::Button::new("Copy JSON to Clipboard"))
-                                            .clicked()
-                                        {
-                                            let s = data.atlas_asset_json.to_string();
-                                            println!("JSON: {s}");
-                                            ui.output_mut(|o| {
-                                                o.copied_text = s;
-                                            });
-                                        };
-                                        ui.add_space(10.0);
-                                        ui.label(RichText::new("Frames JSON").strong());
                                         ui.add_space(10.0);
                                         egui_json_tree::JsonTree::new(
                                             "simple-tree",
                                             &data.atlas_asset_json,
                                         )
                                         .show(ui);
+                                        #[cfg(not(target_arch = "wasm32"))]
+                                        {
+                                            ui.add_space(10.0);
+                                            if ui
+                                                .add(egui::Button::new("Copy JSON to Clipboard"))
+                                                .clicked()
+                                            {
+                                                ui.output_mut(|o| {
+                                                    o.copied_text =
+                                                        data.atlas_asset_json.to_string();
+                                                });
+                                            };
+                                        }
                                     });
                                 });
                             ui.add_space(10.0);
