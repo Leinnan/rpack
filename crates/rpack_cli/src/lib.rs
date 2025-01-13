@@ -1,7 +1,9 @@
 use bevy_rpack::{AtlasFrame, SerializableRect};
 use image::DynamicImage;
+use thiserror::Error;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::Path;
+use std::{fmt::Display, path::Path};
 use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
 
 #[derive(Clone)]
@@ -34,32 +36,68 @@ impl ImageFile {
     }
 }
 
+
+#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+pub enum SaveImageFormat {
+    #[default]
+    Png,
+    Dds,
+}
+
+impl Display for SaveImageFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SaveImageFormat::Png => f.write_str(".png"),
+            SaveImageFormat::Dds => f.write_str(".dds"),
+        }
+    }
+}
+
+impl From<SaveImageFormat> for image::ImageFormat {
+    fn from(val: SaveImageFormat) -> Self {
+        match val {
+            SaveImageFormat::Png => image::ImageFormat::Png,
+            SaveImageFormat::Dds => image::ImageFormat::Dds,
+        }
+    }
+}
+
+
+/// Errors that can occur while building a `Spritesheet`.
+#[non_exhaustive]
+#[derive(Debug, Error)]
+pub enum SpritesheetError {
+    #[error("Cannot pack image: {0}")]
+    CannotPackImage(String),
+    #[error("Failed to export tilemap image")]
+    FailedToExportImage,
+    #[error("could not parse asset: {0}")]
+    ParsingError(#[from] serde_json::Error),
+    #[error("Failed to pack image into tilemap, tilemap to small")]
+    FailedToPackImage,
+}
+
 impl Spritesheet {
     pub fn build<P>(
         config: TexturePackerConfig,
         images: &[ImageFile],
         filename: P,
-    ) -> Result<Self, String>
+    ) -> Result<Self, SpritesheetError>
     where
         P: AsRef<str>,
     {
         let mut packer = TexturePacker::new_skyline(config);
         for image in images.iter() {
             if !packer.can_pack(&image.image) {
-                return Err(format!(
-                    "Consider making atlas bigger. Could not make atlas, failed on: {}",
-                    image.id
-                ));
+                return Err(SpritesheetError::CannotPackImage(image.id.clone()));
             }
-            if let Err(err) = packer.pack_own(&image.id, image.image.clone()) {
-                return Err(format!(
-                    "Could not make atlas, failed on: {}, {:?}",
-                    image.id, err
-                ));
+            if let Err(_err) = packer.pack_own(&image.id, image.image.clone()) {
+                return Err(SpritesheetError::FailedToPackImage);
             }
         }
         let Ok(image_data) = texture_packer::exporter::ImageExporter::export(&packer, None) else {
-            return Err("Failed to export image".to_owned());
+            return Err(SpritesheetError::FailedToExportImage);
         };
 
         let atlas_asset = bevy_rpack::AtlasAsset {
@@ -81,9 +119,7 @@ impl Spritesheet {
                 })
                 .collect(),
         };
-        let Ok(atlas_asset_json) = serde_json::to_value(&atlas_asset) else {
-            return Err("Failed to deserialize".to_owned());
-        };
+        let atlas_asset_json = serde_json::to_value(&atlas_asset)?;
 
         Ok(Spritesheet {
             image_data,
@@ -229,4 +265,12 @@ impl Spritesheet {
             .save_with_format(output_path.as_ref(), image::ImageFormat::Png)
             .unwrap();
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TilemapGenerationConfig {
+    pub asset_paths: Vec<String>,
+    pub output_path: String,
+    pub format: SaveImageFormat,
+    pub size: u32
 }

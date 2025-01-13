@@ -4674,6 +4674,7 @@ dependencies = [
 name = "rpack_cli"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "basis-universal",
  "bevy_rpack",
  "clap",
@@ -4683,6 +4684,7 @@ dependencies = [
  "serde",
  "serde_json",
  "texture_packer",
+ "thiserror 2.0.9",
 ]
 
 [[package]]

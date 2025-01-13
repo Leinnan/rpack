@@ -112,7 +112,7 @@ impl RpackAssetHelper for RpackAtlasAsset {
                 },
                 self.image.clone(),
             )),
-            None => Err(RpackAtlasError::WrongKey),
+            _ => Err(RpackAtlasError::WrongKey),
         }
     }
 
