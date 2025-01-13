@@ -1,10 +1,10 @@
 use bevy_rpack::{AtlasFrame, SerializableRect};
 use image::DynamicImage;
-use thiserror::Error;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{fmt::Display, path::Path};
 use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct Spritesheet {
@@ -36,7 +36,6 @@ impl ImageFile {
     }
 }
 
-
 #[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 pub enum SaveImageFormat {
@@ -62,7 +61,6 @@ impl From<SaveImageFormat> for image::ImageFormat {
         }
     }
 }
-
 
 /// Errors that can occur while building a `Spritesheet`.
 #[non_exhaustive]
@@ -272,5 +270,5 @@ pub struct TilemapGenerationConfig {
     pub asset_paths: Vec<String>,
     pub output_path: String,
     pub format: SaveImageFormat,
-    pub size: u32
+    pub size: u32,
 }
