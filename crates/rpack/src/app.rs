@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText};
 use image::GenericImageView;
-use rpack_cli::{ImageFile, Spritesheet};
+use rpack_cli::{ImageFile, Spritesheet, SpritesheetError};
 use texture_packer::TexturePackerConfig;
 
 use crate::helpers::DroppedFileHelper;
@@ -27,7 +27,7 @@ pub struct Application {
     #[serde(skip)]
     counter: i32,
     #[serde(skip)]
-    data: Option<Result<Spritesheet, String>>,
+    data: Option<Result<Spritesheet, SpritesheetError>>,
     #[serde(skip)]
     min_size: [u32; 2],
     #[serde(skip)]
@@ -470,14 +470,5 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.label("Made by ");
         ui.hyperlink_to("Mev Lyshkin", "https://www.mevlyshkin.com/");
-        ui.label(". ");
-        ui.label("Powered by ");
-        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-        ui.label(" and ");
-        ui.hyperlink_to(
-            "eframe",
-            "https://github.com/emilk/egui/tree/master/crates/eframe",
-        );
-        ui.label(".");
     });
 }
