@@ -44,6 +44,14 @@ Options:
 
 Available at [crates/rpack_cli](https://github.com/Leinnan/rpack/tree/master/crates/rpack_cli).
 
+### Installation
+
+Only with Cargo (Rust package manager) at the moment:
+
+```sh
+cargo install rpack_cli
+```
+
 ## rPack egui
 
 [![Crates.io](https://img.shields.io/crates/v/rpack_egui)](https://crates.io/crates/rpack_egui)
