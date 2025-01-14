@@ -48,7 +48,7 @@ Options:
           Print version
 ```
 
-Available at [crates/rpack_cli](https://github.com/Leinnan/rpack/tree/master/crates/v).
+Available at [crates/rpack_cli](https://github.com/Leinnan/rpack/tree/master/crates/rpack_cli).
 
 
 ## Used formats
