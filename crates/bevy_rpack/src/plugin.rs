@@ -49,10 +49,7 @@ pub trait RpackAssetHelper {
     /// Creates a [`Sprite`] component for the given atlas key, if available in any of the loaded Atlases.
     fn try_make_sprite<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError>;
     /// Creates a [`ImageNode`] component for the given atlas key, if available in any of the loaded Atlases.
-    fn try_make_image_node<T: AsRef<str>>(
-        &self,
-        key: T,
-    ) -> Result<ImageNode, RpackAtlasError>;
+    fn try_make_image_node<T: AsRef<str>>(&self, key: T) -> Result<ImageNode, RpackAtlasError>;
 
     /// Provides list of all loaded atlas data keys
     fn atlas_data_keys(&self) -> Vec<&str>;
@@ -91,10 +88,7 @@ impl RpackAssetHelper for Assets<RpackAtlasAsset> {
         Err(RpackAtlasError::WrongKey)
     }
 
-    fn try_make_image_node<T: AsRef<str>>(
-        &self,
-        key: T,
-    ) -> Result<ImageNode, RpackAtlasError> {
+    fn try_make_image_node<T: AsRef<str>>(&self, key: T) -> Result<ImageNode, RpackAtlasError> {
         if self.is_empty() {
             return Err(RpackAtlasError::NoAtlas);
         }
