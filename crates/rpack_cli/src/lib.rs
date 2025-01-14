@@ -37,7 +37,10 @@ impl ImageFile {
 }
 
 #[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
-#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[cfg_attr(
+    all(feature = "cli", not(target_arch = "wasm32")),
+    derive(clap::ValueEnum)
+)]
 pub enum SaveImageFormat {
     #[default]
     Png,
