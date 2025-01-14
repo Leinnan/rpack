@@ -15,7 +15,7 @@ basis = ["dep:basis-universal"]
 dds = ["dep:image_dds"]
 
 [dependencies]
-bevy_rpack = { default-features = false, path = "../bevy_rpack" }
+bevy_rpack = { default-features = false, path = "../bevy_rpack", version = "0.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 texture_packer = { version = "0.29", features = ["common"] }

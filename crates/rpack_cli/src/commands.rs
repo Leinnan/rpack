@@ -44,8 +44,10 @@ pub enum Commands {
         #[clap(short, long)]
         source_paths: Vec<String>,
         /// Size of the padding between frames in pixel. Default value is `2`
+        #[clap(short, long)]
         texture_padding: Option<u32>,
         /// Size of the padding on the outer edge of the packed image in pixel. Default value is `0`.
+        #[clap(short, long)]
         border_padding: Option<u32>,
     },
     /// Generates a tilemap from config

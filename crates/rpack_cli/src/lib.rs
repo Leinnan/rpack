@@ -307,12 +307,16 @@ pub struct TilemapGenerationConfig {
     pub asset_patterns: Vec<String>,
     pub output_path: String,
     /// Image format, png by default
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub format: Option<SaveImageFormat>,
     /// Size of the tilemap texture. Default value is `2048`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub size: Option<u32>,
     /// Size of the padding between frames in pixel. Default value is `2`
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub texture_padding: Option<u32>,
     /// Size of the padding on the outer edge of the packed image in pixel. Default value is `0`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub border_padding: Option<u32>,
     #[serde(skip)]
     pub working_dir: Option<PathBuf>,
@@ -354,6 +358,7 @@ impl TilemapGenerationConfig {
                 println!("{}", p);
                 glob::glob(&p).expect("Wrong pattern for assets").flatten()
             })
+            .filter(|e| e.is_file())
             .collect();
         file_paths.sort();
         let prefix = get_common_prefix(&file_paths);
