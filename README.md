@@ -1,5 +1,8 @@
 # rpack [![Build Status](https://github.com/Leinnan/rpack/workflows/CI/badge.svg)](https://github.com/Leinnan/rpack/actions?workflow=CI)
 
+[![Crates.io](https://img.shields.io/crates/v/rpack_egui)](https://crates.io/crates/rpack_egui)
+[![Documentation](https://docs.rs/rpack_egui/badge.svg)](https://docs.rs/rpack_egui)
+
 Create tilemaps in seconds!
 
 This repository contains few projects that together make a fully functional solution for generating tilemaps alongside integration to the Bevy game engine.
@@ -13,11 +16,14 @@ To open it in browser click one of the icons below:
 
 A both desktop and web frontend for generating tilemaps. Just drag and drop images into the program and generate tilemaps.
 
-Source code is available in `crates/rpack` directory of the repo.
+Source code is available in `crates/rpack_egui` directory of the repo.
 
 ![rpack_ebVVrMf3wm](https://github.com/user-attachments/assets/bb015348-3c1f-46be-9312-963b4f39f9c0)
 
 ## Bevy rPack
+
+[![Crates.io](https://img.shields.io/crates/v/bevy_rpack)](https://crates.io/crates/bevy_rpack)
+[![Documentation](https://docs.rs/bevy_rpack/badge.svg)](https://docs.rs/bevy_rpack)
 
 A Bevy plugin with support for the `rpack.json` atlases.
 
@@ -26,6 +32,9 @@ More info available at [crates/bevy_rpack](https://github.com/Leinnan/rpack/tree
 Repository contains example how to use plugin in Bevy.
 
 ## rPack CLI
+
+[![Crates.io](https://img.shields.io/crates/v/rpack_cli)](https://crates.io/crates/rpack_cli)
+[![Documentation](https://docs.rs/rpack_cli/badge.svg)](https://docs.rs/rpack_cli)
 
 Command line interface for generating tilemaps. 
 

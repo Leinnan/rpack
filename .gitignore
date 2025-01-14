@@ -1,6 +1,6 @@
 /target
 /crates/*/target
-/crates/rpack/dist
+/crates/rpack_egui/dist
 /dist
 skyline-packer-output.png
 result.png

@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/bevy_rpack",
-    "crates/rpack",
+    "crates/rpack_egui",
     "crates/rpack_cli",
 ]
 
