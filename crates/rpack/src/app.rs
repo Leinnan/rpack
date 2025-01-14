@@ -275,13 +275,13 @@ impl eframe::App for Application {
             .show(ctx, |ui| {
                 powered_by_egui_and_eframe(ui);
             });
-        egui::SidePanel::right("leftPanel")
+        egui::SidePanel::right("right")
             .min_width(200.0)
+            .max_width(400.0)
             .frame(egui::Frame::canvas(&ctx.style()))
             .show_animated(ctx, !self.image_data.is_empty(), |ui| {
-
             egui::ScrollArea::vertical()
-            .id_salt("leftPanel_scroll")
+            .id_salt("rightPanel_scroll")
             .show(ui, |ui| {
                 CollapsingHeader::new("Settings")
                     .default_open(true)
