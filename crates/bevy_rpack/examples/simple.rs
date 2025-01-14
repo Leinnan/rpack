@@ -30,13 +30,13 @@ fn on_loaded(
             continue;
         };
 
-        if let Ok(sprite) = assets.try_make_sprite_from_atlas("agents/spaceAstronauts_005") {
+        if let Ok(sprite) = assets.try_make_sprite("agents/spaceAstronauts_005") {
             commands.spawn(Sprite {
                 color: Color::linear_rgb(1.0, 0.0, 0.0),
                 ..sprite
             });
         };
-        if let Ok(image_node) = assets.try_make_image_node_from_atlas("agents/spaceShips_006") {
+        if let Ok(image_node) = assets.try_make_image_node("agents/spaceShips_006") {
             commands.spawn(image_node);
         }
     }
