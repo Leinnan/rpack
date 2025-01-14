@@ -27,4 +27,109 @@ Repository contains example how to use plugin in Bevy.
 
 ## rPack CLI
 
-Command line interface for generating tilemaps. Code stored in `crates/rpack_cli` directory. Right now this is the part of the project that could change the most.
+Command line interface for generating tilemaps. 
+
+```sh
+Build rpack tilemaps with ease
+
+Usage: rpack_cli <COMMAND>
+
+Commands:
+  generate              Generates a tilemap
+  config-create         Creates a tilemap generation config
+  generate-from-config  Generates a tilemap from config
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+```
+
+Available at [crates/rpack_cli](https://github.com/Leinnan/rpack/tree/master/crates/v).
+
+
+## Used formats
+
+rpack tools provides and work with two json based files.
+
+### Atlas files
+
+Tilemaps are using `.rpack.json` extension. 
+
+Fields:
+
+- `size`: two element array- width and height of the tilemap
+- `filename`: string- path to the atlas image file, relative to the config file
+- `frames`: array- contain info about each frame in tilemap, contains `key` string field and `frame` field that is made up from fields:
+  - `h`- image height 
+  - `w`- image width
+  - `x`- x start pos of the image in the tilemap 
+  - `y`- y start pos of the image in the tilemap 
+
+Example:
+
+```json
+{
+  "filename": "tilemap.png",
+  "frames": [
+    {
+      "frame": {
+        "h": 42,
+        "w": 42,
+        "x": 418,
+        "y": 66
+      },
+      "key": "tiles/ship/spaceBuilding_001"
+    },
+    {
+      "frame": {
+        "h": 44,
+        "w": 34,
+        "x": 2,
+        "y": 2
+      },
+      "key": "tiles/agents/spaceAstronauts_004"
+    },
+  ],
+  "size": [
+    512,
+    512
+  ]
+}
+```
+
+### Generation config files
+
+Config files are using `.rpack_gen.json` extension. 
+
+Fields:
+
+- `output_path`: string- path relative to the config, without extension, this is where tilemap image and `.rpack.json` config file are going to be saved
+- `asset_patterns`: array of strings- search patterns for images to be included, relative paths to the config
+- `format`: optional(defaults to `Png`), format of the tilemap image, currently supported values: `Png`, `Dds`
+- `size`: optional(defaults to `2048`), size of the tilemap image
+- `texture_padding`: optional(defaults to `2`), size of the padding between frames in pixel
+- `border_padding`: optional(defaults to `0`), size of the padding on the outer edge of the packed image in pixel
+
+
+Example:
+
+```json
+{
+  "asset_patterns": [
+    "tiles/agents/*",
+    "tiles/effects/*",
+    "tiles/missiles/*",
+    "tiles/ship/spaceBuilding_00*",
+    "tiles/ship/spaceBuilding_01*"
+  ],
+  "output_path": "assets/tilemap",
+  "format": "Png",
+  "size": 512,
+  "texture_padding": 2,
+  "border_padding": 2
+}
+```

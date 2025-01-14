@@ -5,6 +5,8 @@ A Bevy plugin with support for the `rpack.json` atlases.
 ## Example
 
 ```rust
+//! Simple example that loads the tilemap and once is loaded it creates a sprite with it.
+
 use bevy::prelude::*;
 use bevy_rpack::prelude::*;
 
@@ -21,7 +23,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.insert_resource(Holder(asset_server.load("Tilemap.rpack.json")));
+    commands.insert_resource(Holder(asset_server.load("tilemap.rpack.json")));
     commands.spawn(Camera2d);
 }
 
@@ -35,13 +37,13 @@ fn on_loaded(
             continue;
         };
 
-        if let Ok(sprite) = assets.make_sprite_from_atlas("Sword006") {
+        if let Ok(sprite) = assets.try_make_sprite_from_atlas("agents/spaceAstronauts_005") {
             commands.spawn(Sprite {
                 color: Color::linear_rgb(1.0, 0.0, 0.0),
                 ..sprite
             });
         };
-        if let Ok(image_node) = assets.make_image_node_from_atlas("Axe010") {
+        if let Ok(image_node) = assets.try_make_image_node_from_atlas("agents/spaceShips_006") {
             commands.spawn(image_node);
         }
     }

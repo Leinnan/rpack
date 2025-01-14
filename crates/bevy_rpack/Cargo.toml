@@ -3,10 +3,12 @@ name = "bevy_rpack"
 description = "Bevy plugin with rpack atlas support"
 version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/Leinnan/rpack"
+repository = "https://github.com/Leinnan/rpack.git"
+homepage = "https://github.com/Leinnan/rpack"
 authors = ["Piotr Siuszko <siuszko@zoho.com>"]
 license = "MIT OR Apache-2.0"
 keywords = ["bevy", "2d", "plugin"]
+exclude = ["assets","tiles","*.rpack_gen.json", "justfile"]
 
 [features]
 default = ["bevy"]

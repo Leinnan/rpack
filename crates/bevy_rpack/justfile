@@ -1,0 +1,5 @@
+build_atlas:
+    rpack_cli example_config.rpack_gen.json
+
+prepare:
+    cargo install --path ../rpack_cli

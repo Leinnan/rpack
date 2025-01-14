@@ -1,0 +1,14 @@
+{
+  "asset_patterns": [
+    "tiles/agents/*",
+    "tiles/effects/*",
+    "tiles/missiles/*",
+    "tiles/ship/spaceBuilding_00*",
+    "tiles/ship/spaceBuilding_01*"
+  ],
+  "output_path": "assets/tilemap",
+  "format": "Png",
+  "texture_padding": 5,
+  "border_padding": 2,
+  "size": 512
+}

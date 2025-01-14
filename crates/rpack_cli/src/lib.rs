@@ -2,7 +2,13 @@ use bevy_rpack::{AtlasFrame, SerializableRect};
 use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{fmt::Display, path::Path};
+#[cfg(all(feature = "cli", not(target_arch = "wasm32")))]
+use std::io::Write;
+use std::{
+    ffi::OsStr,
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
 use thiserror::Error;
 
@@ -34,6 +40,34 @@ impl ImageFile {
             None
         }
     }
+}
+
+pub fn get_common_prefix<S>(paths: &[S]) -> String
+where
+    S: AsRef<OsStr> + Sized,
+{
+    if paths.is_empty() {
+        return String::new();
+    }
+    let path = Path::new(paths[0].as_ref())
+        .file_name()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default();
+
+    let mut prefix = String::from(paths[0].as_ref().to_string_lossy())
+        .strip_suffix(&path)
+        .unwrap_or_default()
+        .to_owned();
+
+    for s in paths.iter().skip(1) {
+        let s = s.as_ref().to_string_lossy();
+        while !(s.starts_with(&prefix) || prefix.is_empty()) {
+            prefix.pop();
+        }
+    }
+
+    prefix
 }
 
 #[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
@@ -132,7 +166,7 @@ impl Spritesheet {
     #[cfg(all(feature = "dds", not(target_arch = "wasm32")))]
     pub fn save_as_dds<R>(&self, output_path: R)
     where
-        R: AsRef<str>,
+        R: AsRef<Path>,
     {
         let rgba_image = self.image_data.to_rgba8();
 
@@ -152,7 +186,7 @@ impl Spritesheet {
     #[cfg(all(feature = "basis", not(target_arch = "wasm32")))]
     pub fn save_as_basis<R>(&self, output_path: R)
     where
-        R: AsRef<str>,
+        R: AsRef<Path>,
     {
         use basis_universal::{
             BasisTextureFormat, Compressor, TranscodeParameters, Transcoder,
@@ -268,10 +302,122 @@ impl Spritesheet {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct TilemapGenerationConfig {
-    pub asset_paths: Vec<String>,
+    pub asset_patterns: Vec<String>,
     pub output_path: String,
-    pub format: SaveImageFormat,
-    pub size: u32,
+    /// Image format, png by default
+    pub format: Option<SaveImageFormat>,
+    /// Size of the tilemap texture. Default value is `2048`.
+    pub size: Option<u32>,
+    /// Size of the padding between frames in pixel. Default value is `2`
+    pub texture_padding: Option<u32>,
+    /// Size of the padding on the outer edge of the packed image in pixel. Default value is `0`.
+    pub border_padding: Option<u32>,
+    #[serde(skip)]
+    pub working_dir: Option<PathBuf>,
+}
+
+#[cfg(all(feature = "cli", not(target_arch = "wasm32")))]
+impl TilemapGenerationConfig {
+    pub fn read_from_file<P>(path: P) -> anyhow::Result<TilemapGenerationConfig>
+    where
+        P: AsRef<Path>,
+    {
+        let config_file = std::fs::read_to_string(path.as_ref())?;
+        let mut config: TilemapGenerationConfig = serde_json::from_str(&config_file)?;
+        config.working_dir = Path::new(path.as_ref()).parent().map(|p| p.to_path_buf());
+        Ok(config)
+    }
+
+    pub fn generate(&self) -> anyhow::Result<()> {
+        let dir = match &self.working_dir {
+            None => std::env::current_dir().expect("msg"),
+            Some(p) => {
+                if p.to_string_lossy().len() == 0 {
+                    std::env::current_dir().expect("msg")
+                } else {
+                    p.clone()
+                }
+            }
+        };
+        let working_dir = match std::path::absolute(dir) {
+            Ok(p) => p,
+            Err(e) => panic!("DUPA {:?}", e),
+        };
+
+        let mut file_paths: Vec<PathBuf> = self
+            .asset_patterns
+            .iter()
+            .flat_map(|pattern| {
+                let p = format!("{}/{}", working_dir.to_string_lossy(), pattern);
+                println!("{}", p);
+                glob::glob(&p).expect("Wrong pattern for assets").flatten()
+            })
+            .collect();
+        file_paths.sort();
+        let prefix = get_common_prefix(&file_paths);
+        let images: Vec<ImageFile> = file_paths
+            .iter()
+            .flat_map(|f| {
+                let id = f
+                    .to_str()
+                    .unwrap_or_default()
+                    .strip_prefix(&prefix)
+                    .unwrap_or_default();
+                ImageFile::at_path(f, id)
+            })
+            .collect();
+        let atlas_image_path = working_dir.join(format!(
+            "{}{}",
+            self.output_path,
+            self.format.unwrap_or_default()
+        ));
+        let atlas_filename = Path::new(&atlas_image_path)
+            .file_name()
+            .expect("D")
+            .to_string_lossy()
+            .to_string();
+        let atlas_config_path = working_dir.join(format!("{}.rpack.json", self.output_path));
+        let spritesheet = Spritesheet::build(
+            texture_packer::TexturePackerConfig {
+                max_width: self.size.unwrap_or(2048),
+                max_height: self.size.unwrap_or(2048),
+                allow_rotation: false,
+                force_max_dimensions: true,
+                border_padding: self.border_padding.unwrap_or(0),
+                texture_padding: self.texture_padding.unwrap_or(2),
+                texture_extrusion: 0,
+                trim: false,
+                texture_outlines: false,
+            },
+            &images,
+            &atlas_filename,
+        )?;
+
+        if Path::new(&atlas_config_path).exists() {
+            std::fs::remove_file(&atlas_config_path).expect("Could not remove the old file");
+        }
+        if Path::new(&atlas_image_path).exists() {
+            std::fs::remove_file(&atlas_image_path).expect("Could not remove the old file");
+        }
+        match self.format.unwrap_or_default() {
+            SaveImageFormat::Dds => {
+                #[cfg(feature = "dds")]
+                spritesheet.save_as_dds(&atlas_image_path);
+                #[cfg(not(feature = "dds"))]
+                panic!("Program is compiled without support for dds. Compile it yourself with feature `dds` enabled.");
+            }
+            f => {
+                spritesheet
+                    .image_data
+                    .save_with_format(&atlas_image_path, f.into())?;
+            }
+        }
+        let json = serde_json::to_string_pretty(&spritesheet.atlas_asset_json)?;
+        let mut file = std::fs::File::create(&atlas_config_path)?;
+        file.write_all(json.as_bytes())?;
+
+        Ok(())
+    }
 }

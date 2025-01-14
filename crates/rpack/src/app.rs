@@ -61,7 +61,12 @@ impl Default for Application {
 
 impl Application {
     pub fn rebuild_image_data(&mut self) {
-        let prefix = crate::helpers::get_common_prefix(&self.dropped_files);
+        let file_paths: Vec<String> = self
+            .dropped_files
+            .iter()
+            .map(|dropped_file| dropped_file.file_path())
+            .collect();
+        let prefix = rpack_cli::get_common_prefix(&file_paths);
 
         self.image_data = self
             .dropped_files
@@ -254,7 +259,7 @@ impl eframe::App for Application {
                         .color(MY_ACCENT_COLOR32)
                         .strong();
                     ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, HEADER_HEIGHT));
-                    ui.add(egui::Label::new(text));
+                    ui.add(egui::Label::new(text).selectable(false));
                 });
             });
         ctx.input(|i| {

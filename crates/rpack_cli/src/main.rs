@@ -1,16 +1,29 @@
+use std::path::Path;
+
 use clap::Parser;
+use rpack_cli::TilemapGenerationConfig;
 
 pub mod commands;
 
 /// Build rpack tilemaps with ease
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = "rpack CLI tool")]
+#[command(version, about, long_about = "Build rpack tilemaps with ease")]
+#[command(propagate_version = true)]
 struct Args {
     #[command(subcommand)]
     command: crate::commands::Commands,
 }
 
 fn main() -> anyhow::Result<()> {
+    let args_os = std::env::args_os();
+    if args_os.len() == 2 {
+        let arg = format!("{}", args_os.last().expect("msg").to_string_lossy());
+        if Path::new(&arg).exists() && arg.ends_with("rpack_gen.json") {
+            let config = TilemapGenerationConfig::read_from_file(&arg)?;
+            config.generate()?;
+            return Ok(());
+        }
+    }
     let args = Args::parse();
 
     args.command.run()?;

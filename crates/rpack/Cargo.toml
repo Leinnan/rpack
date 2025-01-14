@@ -1,11 +1,13 @@
 [package]
 name = "rpack"
 version = "0.1.0"
+description = "GUI application for generating rpack atlases"
 authors = ["Piotr Siuszko <siuszko@zoho.com>"]
 edition = "2021"
 rust-version = "1.81"
 repository = "https://github.com/Leinnan/rpack.git"
 homepage = "https://github.com/Leinnan/rpack"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 egui = "0.30"

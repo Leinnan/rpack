@@ -4,4 +4,7 @@
 /dist
 skyline-packer-output.png
 result.png
+/Cargo.lock
+/.idea
+/.vscode
 Cargo.lock

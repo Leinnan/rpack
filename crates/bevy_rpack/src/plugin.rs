@@ -47,15 +47,23 @@ pub trait RpackAssetHelper {
         key: T,
     ) -> Result<(TextureAtlas, Handle<Image>), RpackAtlasError>;
     /// Creates a [`Sprite`] component for the given atlas key, if available in any of the loaded Atlases.
-    fn make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError>;
+    fn try_make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError>;
     /// Creates a [`ImageNode`] component for the given atlas key, if available in any of the loaded Atlases.
-    fn make_image_node_from_atlas<T: AsRef<str>>(
+    fn try_make_image_node_from_atlas<T: AsRef<str>>(
         &self,
         key: T,
     ) -> Result<ImageNode, RpackAtlasError>;
+
+    /// Provides list of all loaded atlas data keys
+    fn atlas_data_keys(&self) -> Vec<&str>;
 }
 
 impl RpackAssetHelper for Assets<RpackAtlasAsset> {
+    fn atlas_data_keys(&self) -> Vec<&str> {
+        self.iter()
+            .flat_map(|(_, e)| e.files.keys().map(|e| e.as_ref()))
+            .collect()
+    }
     fn find_atlas_data_by_key<T: AsRef<str>>(
         &self,
         key: T,
@@ -64,26 +72,26 @@ impl RpackAssetHelper for Assets<RpackAtlasAsset> {
             return Err(RpackAtlasError::NoAtlas);
         }
         for (_, a) in self.iter() {
-            if let Ok(atlas_data) = a.find_atlas_data_by_key(key.as_ref()) {
+            if let Ok(atlas_data) = a.get_atlas_data(key.as_ref()) {
                 return Ok(atlas_data);
             }
         }
         Err(RpackAtlasError::WrongKey)
     }
 
-    fn make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError> {
+    fn try_make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError> {
         if self.is_empty() {
             return Err(RpackAtlasError::NoAtlas);
         }
         for (_, a) in self.iter() {
-            if let Ok(sprite) = a.make_sprite_from_atlas(key.as_ref()) {
+            if let Ok(sprite) = a.try_make_sprite(key.as_ref()) {
                 return Ok(sprite);
             }
         }
         Err(RpackAtlasError::WrongKey)
     }
 
-    fn make_image_node_from_atlas<T: AsRef<str>>(
+    fn try_make_image_node_from_atlas<T: AsRef<str>>(
         &self,
         key: T,
     ) -> Result<ImageNode, RpackAtlasError> {
@@ -91,7 +99,7 @@ impl RpackAssetHelper for Assets<RpackAtlasAsset> {
             return Err(RpackAtlasError::NoAtlas);
         }
         for (_, a) in self.iter() {
-            if let Ok(image_node) = a.make_image_node_from_atlas(key.as_ref()) {
+            if let Ok(image_node) = a.try_make_image_node(key.as_ref()) {
                 return Ok(image_node);
             }
         }
@@ -99,8 +107,9 @@ impl RpackAssetHelper for Assets<RpackAtlasAsset> {
     }
 }
 
-impl RpackAssetHelper for RpackAtlasAsset {
-    fn find_atlas_data_by_key<T: AsRef<str>>(
+impl RpackAtlasAsset {
+    /// Retrieves the atlas data (texture atlas and image) for the given atlas key, if available.
+    pub fn get_atlas_data<T: AsRef<str>>(
         &self,
         key: T,
     ) -> Result<(TextureAtlas, Handle<Image>), RpackAtlasError> {
@@ -116,19 +125,18 @@ impl RpackAssetHelper for RpackAtlasAsset {
         }
     }
 
-    fn make_sprite_from_atlas<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError> {
-        if let Ok((atlas, image)) = self.find_atlas_data_by_key(key) {
+    /// Creates a [`Sprite`] component for the given atlas key
+    pub fn try_make_sprite<T: AsRef<str>>(&self, key: T) -> Result<Sprite, RpackAtlasError> {
+        if let Ok((atlas, image)) = self.get_atlas_data(key) {
             Ok(Sprite::from_atlas_image(image, atlas))
         } else {
             Err(RpackAtlasError::WrongKey)
         }
     }
 
-    fn make_image_node_from_atlas<T: AsRef<str>>(
-        &self,
-        key: T,
-    ) -> Result<ImageNode, RpackAtlasError> {
-        if let Ok((atlas, image)) = self.find_atlas_data_by_key(key) {
+    /// Creates a [`ImageNode`] component for the given atlas key, if available in any of the loaded Atlases.
+    pub fn try_make_image_node<T: AsRef<str>>(&self, key: T) -> Result<ImageNode, RpackAtlasError> {
+        if let Ok((atlas, image)) = self.get_atlas_data(key) {
             Ok(ImageNode::from_atlas_image(image, atlas))
         } else {
             Err(RpackAtlasError::WrongKey)

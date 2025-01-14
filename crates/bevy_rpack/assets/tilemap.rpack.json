@@ -1,72 +1,207 @@
 {
-    "filename": "tilemap.png",
-    "frames": [
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 74,
-                "y": 2
-            },
-            "key": "Sword007"
-        },
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 38,
-                "y": 2
-            },
-            "key": "Axe011"
-        },
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 2,
-                "y": 74
-            },
-            "key": "Axe010"
-        },
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 2,
-                "y": 2
-            },
-            "key": "Sword006"
-        },
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 2,
-                "y": 38
-            },
-            "key": "Sword009"
-        },
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 74,
-                "y": 38
-            },
-            "key": "Axe009"
-        },
-        {
-            "frame": {
-                "h": 34,
-                "w": 34,
-                "x": 38,
-                "y": 38
-            },
-            "key": "Sword008"
-        }
-    ],
-    "size": [
-        128,
-        128
-    ]
+  "filename": "tilemap.png",
+  "frames": [
+    {
+      "frame": {
+        "h": 42,
+        "w": 42,
+        "x": 462,
+        "y": 89
+      },
+      "key": "ship/spaceBuilding_001"
+    },
+    {
+      "frame": {
+        "h": 44,
+        "w": 50,
+        "x": 125,
+        "y": 2
+      },
+      "key": "agents/spaceAstronauts_012"
+    },
+    {
+      "frame": {
+        "h": 44,
+        "w": 37,
+        "x": 41,
+        "y": 2
+      },
+      "key": "agents/spaceAstronauts_005"
+    },
+    {
+      "frame": {
+        "h": 28,
+        "w": 30,
+        "x": 439,
+        "y": 31
+      },
+      "key": "effects/spaceEffects_010"
+    },
+    {
+      "frame": {
+        "h": 44,
+        "w": 50,
+        "x": 180,
+        "y": 2
+      },
+      "key": "agents/spaceAstronauts_018"
+    },
+    {
+      "frame": {
+        "h": 84,
+        "w": 42,
+        "x": 146,
+        "y": 92
+      },
+      "key": "ship/spaceBuilding_002"
+    },
+    {
+      "frame": {
+        "h": 44,
+        "w": 37,
+        "x": 83,
+        "y": 2
+      },
+      "key": "agents/spaceAstronauts_008"
+    },
+    {
+      "frame": {
+        "h": 57,
+        "w": 55,
+        "x": 268,
+        "y": 101
+      },
+      "key": "ship/spaceBuilding_012"
+    },
+    {
+      "frame": {
+        "h": 36,
+        "w": 37,
+        "x": 158,
+        "y": 51
+      },
+      "key": "effects/spaceEffects_013"
+    },
+    {
+      "frame": {
+        "h": 32,
+        "w": 32,
+        "x": 121,
+        "y": 51
+      },
+      "key": "effects/spaceEffects_012"
+    },
+    {
+      "frame": {
+        "h": 82,
+        "w": 114,
+        "x": 2,
+        "y": 51
+      },
+      "key": "agents/spaceShips_009"
+    },
+    {
+      "frame": {
+        "h": 46,
+        "w": 46,
+        "x": 217,
+        "y": 101
+      },
+      "key": "ship/spaceBuilding_006"
+    },
+    {
+      "frame": {
+        "h": 21,
+        "w": 21,
+        "x": 439,
+        "y": 2
+      },
+      "key": "effects/spaceEffects_008"
+    },
+    {
+      "frame": {
+        "h": 24,
+        "w": 28,
+        "x": 465,
+        "y": 2
+      },
+      "key": "effects/spaceEffects_009"
+    },
+    {
+      "frame": {
+        "h": 22,
+        "w": 16,
+        "x": 474,
+        "y": 62
+      },
+      "key": "missiles/spaceMissiles_014"
+    },
+    {
+      "frame": {
+        "h": 44,
+        "w": 34,
+        "x": 2,
+        "y": 2
+      },
+      "key": "agents/spaceAstronauts_004"
+    },
+    {
+      "frame": {
+        "h": 148,
+        "w": 94,
+        "x": 340,
+        "y": 2
+      },
+      "key": "agents/spaceShips_006"
+    },
+    {
+      "frame": {
+        "h": 48,
+        "w": 12,
+        "x": 200,
+        "y": 51
+      },
+      "key": "missiles/spaceMissiles_010"
+    },
+    {
+      "frame": {
+        "h": 94,
+        "w": 100,
+        "x": 235,
+        "y": 2
+      },
+      "key": "agents/spaceShips_003"
+    },
+    {
+      "frame": {
+        "h": 26,
+        "w": 26,
+        "x": 474,
+        "y": 31
+      },
+      "key": "effects/spaceEffects_011"
+    },
+    {
+      "frame": {
+        "h": 33,
+        "w": 18,
+        "x": 439,
+        "y": 64
+      },
+      "key": "missiles/spaceMissiles_028"
+    },
+    {
+      "frame": {
+        "h": 35,
+        "w": 20,
+        "x": 121,
+        "y": 88
+      },
+      "key": "missiles/spaceMissiles_040"
+    }
+  ],
+  "size": [
+    512,
+    512
+  ]
 }
