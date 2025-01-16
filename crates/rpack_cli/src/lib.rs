@@ -154,7 +154,7 @@ impl Spritesheet {
                 })
                 .collect(),
         };
-        atlas_asset.frames.sort_by(|a,b| a.key.cmp(&b.key));
+        atlas_asset.frames.sort_by(|a, b| a.key.cmp(&b.key));
         let atlas_asset_json = serde_json::to_value(&atlas_asset)?;
 
         Ok(Spritesheet {
