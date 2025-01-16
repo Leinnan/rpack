@@ -135,7 +135,7 @@ impl Spritesheet {
             return Err(SpritesheetError::FailedToExportImage);
         };
 
-        let atlas_asset = bevy_rpack::AtlasAsset {
+        let mut atlas_asset = bevy_rpack::AtlasAsset {
             size: [image_data.width(), image_data.height()],
             filename: filename.as_ref().to_owned(),
             frames: packer
@@ -154,6 +154,7 @@ impl Spritesheet {
                 })
                 .collect(),
         };
+        atlas_asset.frames.sort_by(|a,b| a.key.cmp(&b.key));
         let atlas_asset_json = serde_json::to_value(&atlas_asset)?;
 
         Ok(Spritesheet {
