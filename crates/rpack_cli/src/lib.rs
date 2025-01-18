@@ -79,6 +79,7 @@ pub enum SaveImageFormat {
     #[default]
     Png,
     Dds,
+    Basis,
 }
 
 impl Display for SaveImageFormat {
@@ -86,15 +87,7 @@ impl Display for SaveImageFormat {
         match self {
             SaveImageFormat::Png => f.write_str(".png"),
             SaveImageFormat::Dds => f.write_str(".dds"),
-        }
-    }
-}
-
-impl From<SaveImageFormat> for image::ImageFormat {
-    fn from(val: SaveImageFormat) -> Self {
-        match val {
-            SaveImageFormat::Png => image::ImageFormat::Png,
-            SaveImageFormat::Dds => image::ImageFormat::Dds,
+            SaveImageFormat::Basis => f.write_str(".basis"),
         }
     }
 }
@@ -185,14 +178,11 @@ impl Spritesheet {
     }
 
     #[cfg(all(feature = "basis", not(target_arch = "wasm32")))]
-    pub fn save_as_basis<R>(&self, output_path: R)
+    pub fn save_as_basis<R>(&self, output_path: R) -> anyhow::Result<()>
     where
         R: AsRef<Path>,
     {
-        use basis_universal::{
-            BasisTextureFormat, Compressor, TranscodeParameters, Transcoder,
-            TranscoderTextureFormat,
-        };
+        use basis_universal::{BasisTextureFormat, Compressor, Transcoder};
         use image::{EncodableLayout, GenericImageView};
 
         let rgba_image = self.image_data.to_rgba8();
@@ -201,8 +191,8 @@ impl Spritesheet {
         let (pixel_width, pixel_height) = self.image_data.dimensions();
         let mut compressor_params = basis_universal::CompressorParams::new();
         compressor_params.set_generate_mipmaps(true);
-        compressor_params.set_basis_format(BasisTextureFormat::UASTC4x4);
-        compressor_params.set_uastc_quality_level(basis_universal::UASTC_QUALITY_DEFAULT);
+        compressor_params.set_basis_format(BasisTextureFormat::ETC1S);
+        compressor_params.set_etc1s_quality_level(basis_universal::ETC1S_QUALITY_MAX);
         compressor_params.set_print_status_to_stdout(false);
         let mut compressor_image = compressor_params.source_image_mut(0);
         compressor_image.init(
@@ -219,16 +209,14 @@ impl Spritesheet {
         let compression_time = unsafe {
             compressor.init(&compressor_params);
             let t0 = std::time::Instant::now();
-            compressor.process().unwrap();
+            compressor.process().expect("Failed to compress the image.");
             let t1 = std::time::Instant::now();
             t1 - t0
         };
 
         // You could write it to disk like this
         let basis_file = compressor.basis_file();
-        // std::fs::write("example_encoded_image.basis", basis_file).unwrap();
-
-        let mut transcoder = Transcoder::new();
+        let transcoder = Transcoder::new();
         let mip_level_count = transcoder.image_level_count(basis_file, 0);
         println!(
             "Compressed {} mip levels to {} total bytes in {} ms",
@@ -236,70 +224,8 @@ impl Spritesheet {
             compressor.basis_file_size(),
             compression_time.as_secs_f64() * 1000.0
         );
-
-        let userdata = transcoder.user_data(basis_file).unwrap();
-        println!("Basis file has user data {:?}", userdata);
-
-        //
-        // Now lets transcode it back to raw images
-        //
-        transcoder.prepare_transcoding(basis_file).unwrap();
-
-        let t0 = std::time::Instant::now();
-        let result = transcoder
-            .transcode_image_level(
-                basis_file,
-                TranscoderTextureFormat::ASTC_4x4_RGBA,
-                TranscodeParameters {
-                    image_index: 0,
-                    level_index: 0,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-        let t1 = std::time::Instant::now();
-
-        println!(
-            "Transcoded mip level 0 to ASTC_4x4_RGBA: {} bytes {} ms",
-            result.len(),
-            (t1 - t0).as_secs_f64() * 1000.0
-        );
-
-        let t0 = std::time::Instant::now();
-        let result = transcoder
-            .transcode_image_level(
-                basis_file,
-                TranscoderTextureFormat::RGBA32,
-                TranscodeParameters {
-                    image_index: 0,
-                    level_index: 0,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-        let t1 = std::time::Instant::now();
-
-        println!(
-            "Transcoded mip level 0 to RGBA32: {} bytes {} ms",
-            result.len(),
-            (t1 - t0).as_secs_f64() * 1000.0
-        );
-
-        transcoder.end_transcoding();
-
-        let description = transcoder
-            .image_level_description(basis_file, 0, 0)
-            .unwrap();
-        let image = image::RgbaImage::from_raw(
-            description.original_width,
-            description.original_height,
-            result,
-        )
-        .unwrap();
-        // TODO THIS DOESNT WORK, NEED TO FIX THIS
-        image
-            .save_with_format(output_path.as_ref(), image::ImageFormat::Png)
-            .unwrap();
+        std::fs::write(output_path.as_ref(), basis_file)?;
+        Ok(())
     }
 }
 
@@ -414,10 +340,16 @@ impl TilemapGenerationConfig {
                 #[cfg(not(feature = "dds"))]
                 panic!("Program is compiled without support for dds. Compile it yourself with feature `dds` enabled.");
             }
-            f => {
+            SaveImageFormat::Png => {
                 spritesheet
                     .image_data
-                    .save_with_format(&atlas_image_path, f.into())?;
+                    .save_with_format(&atlas_image_path, image::ImageFormat::Png)?;
+            }
+            SaveImageFormat::Basis => {
+                #[cfg(feature = "basis")]
+                spritesheet.save_as_basis(&atlas_image_path)?;
+                #[cfg(not(feature = "basis"))]
+                panic!("Program is compiled without support for basis. Compile it yourself with feature `basis` enabled.");
             }
         }
         let json = serde_json::to_string_pretty(&spritesheet.atlas_asset_json)?;
