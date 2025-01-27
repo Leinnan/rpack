@@ -55,7 +55,6 @@ cargo install rpack_cli
 ## rPack egui
 
 [![Crates.io](https://img.shields.io/crates/v/rpack_egui)](https://crates.io/crates/rpack_egui)
-[![Documentation](https://docs.rs/rpack_egui/badge.svg)](https://docs.rs/rpack_egui)
 
 A both desktop and web frontend for generating tilemaps. Just drag and drop images into the program and generate tilemaps.
 
