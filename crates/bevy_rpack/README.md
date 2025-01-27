@@ -34,7 +34,7 @@ Both ways result in creation of two files:
 - `assets/tilemap.png` containing atlas image
 - `assets/tilemap.rpack.json` containing atlas image frames data used by bevy plugin.
 
-Second way generated additional `tiles_config.rpack_gen.json` file that 
+Second way generated additional `tiles_config.rpack_gen.json` file that provides settings for the CLI tool.
 
 With those files generated it should be possible to use atlases like in the example from `Example` docs section.
 
