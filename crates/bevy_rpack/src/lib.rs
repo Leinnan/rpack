@@ -10,7 +10,7 @@ pub mod prelude {
     /// Provides easy access to `Rpack` asset-related functionality in a Bevy application.
     pub use super::plugin::{
         RpackAssetHelper, RpackAssetPlugin, RpackAtlasAsset, RpackAtlasAssetError,
-        RpackAtlasAssetLoader, RpackAtlasError,
+        RpackAtlasAssetLoader, RpackAtlasError, RpackAtlases,
     };
     /// Re-exports core types for working with texture atlases.
     pub use super::{AtlasAsset, AtlasFrame, SerializableRect};

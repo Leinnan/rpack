@@ -1,5 +1,6 @@
 use crate::{AtlasAsset, SerializableRect};
 use bevy::asset::{AssetLoader, AsyncReadExt};
+use bevy::ecs::system::SystemParam;
 use bevy::image::ImageSampler;
 use bevy::{prelude::*, utils::HashMap};
 use thiserror::Error;
@@ -37,6 +38,10 @@ impl From<SerializableRect> for URect {
         }
     }
 }
+
+/// SystemParam helper for accessing and creating components from `Rpack` atlas data.
+#[derive(SystemParam, DerefMut, Deref)]
+pub struct RpackAtlases<'w>(pub Res<'w, Assets<RpackAtlasAsset>>);
 
 /// A helper trait for accessing and creating components from `Rpack` atlas data.
 #[allow(dead_code)]
