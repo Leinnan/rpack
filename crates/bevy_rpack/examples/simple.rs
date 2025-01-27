@@ -11,7 +11,7 @@ fn main() {
     App::new()
         .add_plugins((DefaultPlugins, RpackAssetPlugin))
         .add_systems(Startup, setup)
-        .add_systems(Update, on_loaded)
+        .add_systems(Update, atlas_loaded)
         .run();
 }
 
@@ -20,24 +20,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 }
 
-fn on_loaded(
+fn atlas_loaded(
     mut ev_asset: EventReader<AssetEvent<RpackAtlasAsset>>,
     atlases: RpackAtlases,
     mut commands: Commands,
 ) {
-    for ev in ev_asset.read() {
-        if !matches!(ev, AssetEvent::LoadedWithDependencies { id: _ }) {
-            continue;
-        }
-
-        if let Ok(sprite) = atlases.try_make_sprite("agents/spaceAstronauts_005") {
-            commands.spawn(Sprite {
-                color: Color::linear_rgb(1.0, 0.0, 0.0),
-                ..sprite
-            });
-        };
-        if let Ok(image_node) = atlases.try_make_image_node("agents/spaceShips_006") {
-            commands.spawn(image_node);
-        }
+    if !ev_asset
+        .read()
+        .any(|ev| matches!(ev, AssetEvent::LoadedWithDependencies { id: _ }))
+    {
+        return;
+    }
+    if let Ok(sprite) = atlases.try_make_sprite("agents/spaceAstronauts_005") {
+        commands.spawn(sprite);
+    };
+    if let Ok(image_node) = atlases.try_make_image_node("agents/spaceShips_006") {
+        commands.spawn(image_node);
     }
 }

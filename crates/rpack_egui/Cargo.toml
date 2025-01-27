@@ -19,7 +19,7 @@ eframe = { version = "0.30", default-features = false, features = [
 ] }
 log = "0.4"
 egui_json_tree = "0.10"
-rpack_cli = { default-features = false, path = "../rpack_cli", version = "0.2" }
+rpack_cli = { default-features = false, path = "../rpack_cli", version = "0.1" }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }

@@ -79,6 +79,7 @@ pub enum SaveImageFormat {
     #[default]
     Png,
     Dds,
+    #[cfg(feature = "basis")]
     Basis,
 }
 
@@ -87,6 +88,7 @@ impl Display for SaveImageFormat {
         match self {
             SaveImageFormat::Png => f.write_str(".png"),
             SaveImageFormat::Dds => f.write_str(".dds"),
+            #[cfg(feature = "basis")]
             SaveImageFormat::Basis => f.write_str(".basis"),
         }
     }
@@ -272,17 +274,13 @@ impl TilemapGenerationConfig {
                 }
             }
         };
-        let working_dir = match std::path::absolute(dir) {
-            Ok(p) => p,
-            Err(e) => panic!("DUPA {:?}", e),
-        };
+        let working_dir = std::path::absolute(dir)?;
 
         let mut file_paths: Vec<PathBuf> = self
             .asset_patterns
             .iter()
             .flat_map(|pattern| {
                 let p = format!("{}/{}", working_dir.to_string_lossy(), pattern);
-                println!("{}", p);
                 glob::glob(&p).expect("Wrong pattern for assets").flatten()
             })
             .filter(|e| e.is_file())
@@ -345,16 +343,20 @@ impl TilemapGenerationConfig {
                     .image_data
                     .save_with_format(&atlas_image_path, image::ImageFormat::Png)?;
             }
+            #[cfg(feature = "basis")]
             SaveImageFormat::Basis => {
-                #[cfg(feature = "basis")]
                 spritesheet.save_as_basis(&atlas_image_path)?;
-                #[cfg(not(feature = "basis"))]
                 panic!("Program is compiled without support for basis. Compile it yourself with feature `basis` enabled.");
             }
         }
         let json = serde_json::to_string_pretty(&spritesheet.atlas_asset_json)?;
         let mut file = std::fs::File::create(&atlas_config_path)?;
         file.write_all(json.as_bytes())?;
+        println!(
+            "Atlas from {} images saved at: {}",
+            spritesheet.atlas_asset.frames.len(),
+            atlas_config_path.display()
+        );
 
         Ok(())
     }
