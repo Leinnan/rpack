@@ -16,3 +16,7 @@ strip = true
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]
 opt-level = 2
+
+[workspace.dependencies]
+texture_packer = { version = "0.30", features = ["common"] }
+image = { version = "0.25", features = ["jpeg", "png"] }

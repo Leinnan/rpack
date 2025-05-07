@@ -2,7 +2,8 @@ use crate::{AtlasAsset, SerializableRect};
 use bevy::asset::{AssetLoader, AsyncReadExt};
 use bevy::ecs::system::SystemParam;
 use bevy::image::ImageSampler;
-use bevy::{prelude::*, utils::HashMap};
+use bevy::prelude::*;
+use bevy::platform::collections::HashMap;
 use thiserror::Error;
 
 /// Errors that can occur while accessing and creating components from [`RpackAtlasAsset`].
@@ -193,13 +194,33 @@ impl From<bevy::asset::LoadDirectError> for RpackAtlasAssetError {
     }
 }
 
+/// Configuration settings for the `RpackAtlasAssetLoaderSettings`.
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct RpackAtlasAssetLoaderSettings {
+    /// The [`ImageSampler`] to use during font image rendering. Determines
+    /// how the font's texture is sampled when scaling or transforming it.
+    ///
+    /// The default is `nearest`, which scales the image without blurring,
+    /// preserving a crisp, pixelated appearance. This is usually ideal for
+    /// pixel-art.
+    pub image_sampler: ImageSampler,
+}
+
+impl Default for RpackAtlasAssetLoaderSettings {
+    fn default() -> Self {
+        Self {
+            image_sampler: ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor::nearest()),
+        }
+    }
+}
+
 /// The loader responsible for loading `RpackAtlasAsset` files from `.rpack.json` files.
 #[derive(Default)]
 pub struct RpackAtlasAssetLoader;
 
 impl AssetLoader for RpackAtlasAssetLoader {
     type Asset = RpackAtlasAsset;
-    type Settings = ();
+    type Settings = RpackAtlasAssetLoaderSettings;
     type Error = RpackAtlasAssetError;
 
     fn extensions(&self) -> &[&str] {
@@ -209,7 +230,7 @@ impl AssetLoader for RpackAtlasAssetLoader {
     async fn load(
         &self,
         reader: &mut dyn bevy::asset::io::Reader,
-        _settings: &(),
+        settings: &RpackAtlasAssetLoaderSettings,
         load_context: &mut bevy::asset::LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
         let mut file = String::new();
@@ -233,7 +254,7 @@ impl AssetLoader for RpackAtlasAssetLoader {
             .ok_or(RpackAtlasAssetError::LoadingImageAsset(
                 "failed to load image asset, does it exist".to_string(),
             ))?;
-        image.sampler = ImageSampler::nearest();
+        image.sampler = settings.image_sampler.clone();
 
         let mut layout = TextureAtlasLayout::new_empty(UVec2::new(asset.size[0], asset.size[1]));
         let mut files = HashMap::new();

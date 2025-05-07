@@ -112,4 +112,5 @@ fn atlas_loaded(
 
 Bevy version | Crate version
 --- | ---
+0.16 | 0.2
 0.15 | 0.1
