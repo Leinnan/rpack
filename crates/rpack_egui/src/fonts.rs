@@ -55,8 +55,8 @@ fn get_fonts() -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
 fn get_fonts() -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
     let font_path = std::path::Path::new("/System/Library/Fonts");
 
-    let regular = fs::read(font_path.join("SFNSRounded.ttf"))?;
-    let semibold = fs::read(font_path.join("SFCompact.ttf"))?;
+    let regular = std::fs::read(font_path.join("SFNSRounded.ttf"))?;
+    let semibold = std::fs::read(font_path.join("SFCompact.ttf"))?;
 
     Ok((regular, semibold))
 }

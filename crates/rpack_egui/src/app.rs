@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use egui::{CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Image, RichText};
-use image::GenericImageView;
+use egui::{
+    CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Grid, Image, Label, RichText,
+};
 use rpack_cli::{ImageFile, Spritesheet, SpritesheetError};
 use texture_packer::TexturePackerConfig;
 
@@ -33,8 +34,22 @@ pub struct Application {
     #[serde(skip)]
     max_size: u32,
     #[serde(skip)]
-    image_data: HashMap<String, ImageFile>,
+    image_data: HashMap<String, AppImageData>,
 }
+
+pub struct AppImageData {
+    pub width: u32,
+    pub height: u32,
+    pub data: ImageFile,
+    pub path: String,
+}
+
+impl AppImageData {
+    pub fn id(&self) -> &str {
+        self.data.id.as_str()
+    }
+}
+
 impl Default for Application {
     fn default() -> Self {
         Self {
@@ -71,7 +86,7 @@ impl Application {
         self.image_data = self
             .dropped_files
             .iter()
-            .flat_map(|f| f.create_image(&prefix))
+            .flat_map(|f| f.create_image(&prefix).map(|i| (i.id().to_string(), i)))
             .collect();
         self.update_min_size();
     }
@@ -79,18 +94,18 @@ impl Application {
         if let Some(file) = self
             .image_data
             .values()
-            .max_by(|a, b| a.image.width().cmp(&b.image.width()))
+            .max_by(|a, b| a.width.cmp(&b.width))
         {
-            self.min_size[0] = file.image.width();
+            self.min_size[0] = file.width;
         } else {
             self.min_size[0] = 32;
         }
         if let Some(file) = self
             .image_data
             .values()
-            .max_by(|a, b| a.image.height().cmp(&b.image.height()))
+            .max_by(|a, b| a.height.cmp(&b.height))
         {
-            self.min_size[1] = file.image.height();
+            self.min_size[1] = file.height;
         } else {
             self.min_size[1] = 32;
         }
@@ -114,7 +129,11 @@ impl Application {
     fn build_atlas(&mut self, ctx: &egui::Context) {
         self.data = None;
         self.image = None;
-        let images: Vec<ImageFile> = self.image_data.values().cloned().collect();
+        let images: Vec<ImageFile> = self
+            .image_data
+            .values()
+            .map(|file| file.data.clone())
+            .collect();
 
         for size in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
             if size < self.min_size[0] || size < self.min_size[1] {
@@ -328,25 +347,41 @@ impl eframe::App for Application {
                 CollapsingHeader::new("Image list")
                     .default_open(true)
                     .show(ui, |ui| {
-                        if !self.image_data.is_empty() && ui.button("clear list").clicked() {
-                            self.image_data.clear();
-                            self.dropped_files.clear();
-                            self.data = None;
-                            self.update_min_size();
-                        }
-                        let mut to_remove: Option<String> = None;
-                        for (id, file) in self.image_data.iter() {
-                            ui.horizontal_top(|ui| {
-                                ui.add_space(10.0);
-                                if ui.button("x").clicked() {
-                                    to_remove = Some(id.clone());
+                        ui.horizontal(|ui|{
+
+                            if !self.image_data.is_empty() && ui.button("clear list").clicked() {
+                                self.image_data.clear();
+                                self.dropped_files.clear();
+                                self.data = None;
+                                self.update_min_size();
+                            }
+                            ui.add_space(10.0);
+                            #[cfg(not(target_arch = "wasm32"))]
+                            if ui.button("Add").clicked() {
+                                if let Some(files) = rfd::FileDialog::new().set_title("Add images").add_filter("Images", &["png", "jpg", "jpeg","dds"]).pick_files(){
+                                    for file in files.iter() {
+                                        let Ok(image) = texture_packer::importer::ImageImporter::import_from_file(file) else { continue };
+                                        let id = crate::helpers::id_from_path(&file.to_string_lossy());
+                                        self.image_data.insert(file.to_string_lossy().to_string(), AppImageData { width: image.width(), height: image.height(), data: ImageFile { id: id, image }, path: file.to_string_lossy().to_string() });
+                                    }
+                                    self.update_min_size();
                                 }
-                                ui.add_space(10.0);
-                                let (x, y) = file.image.dimensions();
-                                ui.label(&file.id)
-                                    .on_hover_text(format!("Dimensions: {}x{}", x, y));
-                            });
-                        }
+                            }
+                        });
+                        let mut to_remove: Option<String> = None;
+                        Grid::new("Image List").num_columns(4).striped(true).spacing((10.0,10.0)).show(ui, |ui|{
+
+                            for (id, file) in self.image_data.iter() {
+                                    if ui.button("x").clicked() {
+                                        to_remove = Some(id.clone());
+                                    }
+
+                                    ui.image(format!("file://{}", file.path));
+                                    ui.add(Label::new(file.id()).selectable(false));
+                                    ui.add(Label::new(format!("{}x{}", file.width, file.height)).selectable(false));
+                                    ui.end_row();
+                            }
+                        });
                         if let Some(index) = to_remove {
                             if let Some(i) = self
                                 .dropped_files
@@ -377,10 +412,13 @@ impl eframe::App for Application {
                     if self.dropped_files.is_empty() {
                         ui.vertical_centered_justified(|ui| {
                             ui.add_space(50.0);
-                            ui.label(
-                                RichText::new("Drop images here first")
-                                    .heading()
-                                    .color(MY_ACCENT_COLOR32),
+                            ui.add(
+                                Label::new(
+                                    RichText::new("Drop images here first")
+                                        .heading()
+                                        .color(MY_ACCENT_COLOR32),
+                                )
+                                .selectable(false),
                             );
                         });
                     }
@@ -444,10 +482,8 @@ impl eframe::App for Application {
                                                 .add(egui::Button::new("Copy JSON to Clipboard"))
                                                 .clicked()
                                             {
-                                                ui.output_mut(|o| {
-                                                    o.copied_text =
-                                                        data.atlas_asset_json.to_string();
-                                                });
+                                                ui.ctx()
+                                                    .copy_text(data.atlas_asset_json.to_string());
                                             };
                                         }
                                     });
