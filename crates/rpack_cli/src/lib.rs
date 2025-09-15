@@ -9,7 +9,7 @@ use std::{
     fmt::Display,
     path::{Path, PathBuf},
 };
-use texture_packer::{importer::ImageImporter, TexturePacker, TexturePackerConfig};
+use texture_packer::{TexturePacker, TexturePackerConfig, importer::ImageImporter};
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -267,7 +267,7 @@ impl TilemapGenerationConfig {
         let dir = match &self.working_dir {
             None => std::env::current_dir().expect("msg"),
             Some(p) => {
-                if p.to_string_lossy().len() == 0 {
+                if p.as_os_str().is_empty() {
                     std::env::current_dir().expect("msg")
                 } else {
                     p.clone()
@@ -336,7 +336,9 @@ impl TilemapGenerationConfig {
                 #[cfg(feature = "dds")]
                 spritesheet.save_as_dds(&atlas_image_path);
                 #[cfg(not(feature = "dds"))]
-                panic!("Program is compiled without support for dds. Compile it yourself with feature `dds` enabled.");
+                panic!(
+                    "Program is compiled without support for dds. Compile it yourself with feature `dds` enabled."
+                );
             }
             SaveImageFormat::Png => {
                 spritesheet
@@ -346,7 +348,9 @@ impl TilemapGenerationConfig {
             #[cfg(feature = "basis")]
             SaveImageFormat::Basis => {
                 spritesheet.save_as_basis(&atlas_image_path)?;
-                panic!("Program is compiled without support for basis. Compile it yourself with feature `basis` enabled.");
+                panic!(
+                    "Program is compiled without support for basis. Compile it yourself with feature `basis` enabled."
+                );
             }
         }
         let json = serde_json::to_string_pretty(&spritesheet.atlas_asset_json)?;

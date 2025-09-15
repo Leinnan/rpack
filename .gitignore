@@ -8,3 +8,4 @@ result.png
 /.idea
 /.vscode
 Cargo.lock
+.DS_Store

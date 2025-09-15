@@ -2,8 +2,8 @@ use crate::{AtlasAsset, SerializableRect};
 use bevy::asset::{AssetLoader, AsyncReadExt};
 use bevy::ecs::system::SystemParam;
 use bevy::image::ImageSampler;
-use bevy::prelude::*;
 use bevy::platform::collections::HashMap;
+use bevy::prelude::*;
 use thiserror::Error;
 
 /// Errors that can occur while accessing and creating components from [`RpackAtlasAsset`].

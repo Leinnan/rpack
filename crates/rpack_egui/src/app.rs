@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-
-use egui::{
-    CollapsingHeader, Color32, DroppedFile, FontFamily, FontId, Grid, Image, Label, RichText,
-};
+use egui::{CollapsingHeader, Color32, FontFamily, FontId, Grid, Image, Label, RichText};
 use rpack_cli::{ImageFile, Spritesheet, SpritesheetError};
 use texture_packer::TexturePackerConfig;
 
@@ -18,25 +14,22 @@ pub const GIT_HASH: &str = env!("GIT_HASH");
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Application {
     #[serde(skip)]
-    dropped_files: Vec<DroppedFile>,
-    #[serde(skip)]
     config: TexturePackerConfig,
     #[serde(skip)]
-    image: Option<Image<'static>>,
+    output: Option<SpriteSheetResult>,
     #[serde(skip)]
     name: String,
-    #[serde(skip)]
-    counter: i32,
-    #[serde(skip)]
-    data: Option<Result<Spritesheet, SpritesheetError>>,
     #[serde(skip)]
     min_size: [u32; 2],
     #[serde(skip)]
     max_size: u32,
     #[serde(skip)]
-    image_data: HashMap<String, AppImageData>,
+    image_data: Vec<AppImageData>,
 }
 
+type SpriteSheetResult = Result<Spritesheet, SpritesheetError>;
+
+#[derive(Clone)]
 pub struct AppImageData {
     pub width: u32,
     pub height: u32,
@@ -48,12 +41,19 @@ impl AppImageData {
     pub fn id(&self) -> &str {
         self.data.id.as_str()
     }
+
+    pub fn update_id(&mut self, prefix: &str) {
+        self.data.id = self
+            .path
+            .strip_prefix(prefix)
+            .unwrap_or(&self.path)
+            .to_owned();
+    }
 }
 
 impl Default for Application {
     fn default() -> Self {
         Self {
-            dropped_files: vec![],
             config: TexturePackerConfig {
                 max_width: 512,
                 max_height: 512,
@@ -63,46 +63,40 @@ impl Default for Application {
                 force_max_dimensions: true,
                 ..Default::default()
             },
-            counter: 0,
-            image: None,
-            data: None,
+            output: None,
             max_size: 4096,
             name: String::from("Tilemap"),
             min_size: [32, 32],
-            image_data: HashMap::new(),
+            image_data: Vec::new(),
         }
     }
 }
 
 impl Application {
-    pub fn rebuild_image_data(&mut self) {
+    pub fn get_common_prefix(&self) -> String {
         let file_paths: Vec<String> = self
-            .dropped_files
+            .image_data
             .iter()
-            .map(|dropped_file| dropped_file.file_path())
+            .map(|image| image.path.clone())
             .collect();
-        let prefix = rpack_cli::get_common_prefix(&file_paths);
-
-        self.image_data = self
-            .dropped_files
-            .iter()
-            .flat_map(|f| f.create_image(&prefix).map(|i| (i.id().to_string(), i)))
-            .collect();
+        rpack_cli::get_common_prefix(&file_paths)
+    }
+    pub fn rebuild_image_data(&mut self) {
+        let prefix = self.get_common_prefix();
+        self.image_data
+            .iter_mut()
+            .for_each(|f| f.update_id(prefix.as_str()));
         self.update_min_size();
     }
     pub fn update_min_size(&mut self) {
-        if let Some(file) = self
-            .image_data
-            .values()
-            .max_by(|a, b| a.width.cmp(&b.width))
-        {
+        if let Some(file) = self.image_data.iter().max_by(|a, b| a.width.cmp(&b.width)) {
             self.min_size[0] = file.width;
         } else {
             self.min_size[0] = 32;
         }
         if let Some(file) = self
             .image_data
-            .values()
+            .iter()
             .max_by(|a, b| a.height.cmp(&b.height))
         {
             self.min_size[1] = file.height;
@@ -127,11 +121,11 @@ impl Application {
     }
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
-        self.data = None;
-        self.image = None;
+        self.output = None;
+        ctx.forget_image("bytes://output.png");
         let images: Vec<ImageFile> = self
             .image_data
-            .values()
+            .iter()
             .map(|file| file.data.clone())
             .collect();
 
@@ -147,29 +141,30 @@ impl Application {
                 max_height: size,
                 ..self.config
             };
-            self.data = Some(Spritesheet::build(
-                config,
-                &images,
-                format!("{}.png", &self.name),
-            ));
-            if let Some(Ok(data)) = &self.data {
-                let mut out_vec = vec![];
-                data.image_data
-                    .write_to(
-                        &mut std::io::Cursor::new(&mut out_vec),
-                        image::ImageFormat::Png,
-                    )
-                    .unwrap();
-                ctx.include_bytes("bytes://output.png", out_vec);
-                self.image = Some(Image::from_uri("bytes://output.png"));
-                break;
+            match Spritesheet::build(config, &images, format!("{}.png", &self.name)) {
+                Ok(data) => {
+                    let mut out_vec = vec![];
+                    data.image_data
+                        .write_to(
+                            &mut std::io::Cursor::new(&mut out_vec),
+                            image::ImageFormat::Png,
+                        )
+                        .unwrap();
+                    ctx.include_bytes("bytes://output.png", out_vec);
+
+                    self.output = Some(Ok(data));
+                    break;
+                }
+                Err(e) => {
+                    self.output = Some(Err(e));
+                }
             }
         }
         ctx.request_repaint();
     }
 
     fn save_json(&self) -> Result<(), String> {
-        let Some(Ok(spritesheet)) = &self.data else {
+        let Some(Ok(spritesheet)) = &self.output else {
             return Err("Data is incorrect".to_owned());
         };
         let data = spritesheet.atlas_asset_json.to_string();
@@ -209,7 +204,7 @@ impl Application {
     }
 
     fn save_atlas(&self) -> Result<(), String> {
-        let Some(Ok(spritesheet)) = &self.data else {
+        let Some(Ok(spritesheet)) = &self.output else {
             return Err("Data is incorrect".to_owned());
         };
         let filename = format!("{}.png", self.name);
@@ -265,10 +260,10 @@ impl eframe::App for Application {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.dropped_files.is_empty() && self.image.is_some() {
-            self.image = None;
-            self.data = None;
-        }
+        // if self.dropped_files.is_empty() && self.image.is_some() {
+        //     self.image = None;
+        //     self.data = None;
+        // }
         egui::TopBottomPanel::top("topPanel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
@@ -283,9 +278,34 @@ impl eframe::App for Application {
             });
         ctx.input(|i| {
             if !i.raw.dropped_files.is_empty() {
-                let mut extra = i.raw.dropped_files.clone();
-                self.dropped_files.append(&mut extra);
-                self.data = None;
+                for file in i.raw.dropped_files.iter() {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(path) = &file.path {
+                        if path.is_dir() {
+                            let Ok(dir) = path.read_dir() else {
+                                continue;
+                            };
+                            for entry in dir {
+                                if let Ok(entry) = entry {
+                                    let Ok(metadata) = entry.metadata() else {
+                                        continue;
+                                    };
+                                    if metadata.is_file() {
+                                        let Some(dyn_image) = entry.create_image("") else {
+                                            continue;
+                                        };
+                                        self.image_data.push(dyn_image);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let Some(dyn_image) = file.create_image("") else {
+                        continue;
+                    };
+                    self.image_data.push(dyn_image);
+                }
+                self.output = None;
                 self.rebuild_image_data();
             }
         });
@@ -329,13 +349,11 @@ impl eframe::App for Application {
                             // ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
                             ui.add_space(10.0);
 
-                            ui.add_enabled_ui(!self.dropped_files.is_empty(), |ui| {
+                            ui.add_enabled_ui(!self.image_data.is_empty(), |ui| {
                                     if ui
                                     .add_sized([TOP_BUTTON_WIDTH, 30.0], egui::Button::new("Build atlas"))
                                     .clicked()
                                     {
-                                        self.image = None;
-                                        ctx.forget_image("bytes://output.png");
                                         self.build_atlas(ctx);
                                     }
                                     ui.add_space(10.0);
@@ -346,13 +364,12 @@ impl eframe::App for Application {
                 ui.separator();
                 CollapsingHeader::new("Image list")
                     .default_open(true)
-                    .show(ui, |ui| {
+                    .show_unindented(ui, |ui| {
                         ui.horizontal(|ui|{
 
                             if !self.image_data.is_empty() && ui.button("clear list").clicked() {
                                 self.image_data.clear();
-                                self.dropped_files.clear();
-                                self.data = None;
+                                self.output = None;
                                 self.update_min_size();
                             }
                             ui.add_space(10.0);
@@ -362,37 +379,35 @@ impl eframe::App for Application {
                                     for file in files.iter() {
                                         let Ok(image) = texture_packer::importer::ImageImporter::import_from_file(file) else { continue };
                                         let id = crate::helpers::id_from_path(&file.to_string_lossy());
-                                        self.image_data.insert(file.to_string_lossy().to_string(), AppImageData { width: image.width(), height: image.height(), data: ImageFile { id: id, image }, path: file.to_string_lossy().to_string() });
+                                        self.image_data.push(AppImageData { width: image.width(), height: image.height(), data: ImageFile { id: id, image }, path: file.to_string_lossy().to_string() });
                                     }
-                                    self.update_min_size();
+                                    self.rebuild_image_data();
                                 }
                             }
                         });
-                        let mut to_remove: Option<String> = None;
-                        Grid::new("Image List").num_columns(4).striped(true).spacing((10.0,10.0)).show(ui, |ui|{
+                        let mut to_remove: Option<usize> = None;
+                        let columns = if cfg!(target_arch = "wasm32") {
+                            3
+                        } else {
+                            4
+                        };
+                        Grid::new("Image List").num_columns(columns).striped(true).spacing((10.0,10.0)).show(ui, |ui|{
 
-                            for (id, file) in self.image_data.iter() {
+                            for (index, file) in self.image_data.iter().enumerate() {
                                     if ui.button("x").clicked() {
-                                        to_remove = Some(id.clone());
+                                        to_remove = Some(index);
                                     }
-
-                                    ui.image(format!("file://{}", file.path));
-                                    ui.add(Label::new(file.id()).selectable(false));
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    ui.image(format!("file://{}", file.path.as_str()));
                                     ui.add(Label::new(format!("{}x{}", file.width, file.height)).selectable(false));
+                                    ui.add(Label::new(file.id()).selectable(false));
                                     ui.end_row();
                             }
                         });
                         if let Some(index) = to_remove {
-                            if let Some(i) = self
-                                .dropped_files
-                                .iter()
-                                .position(|e| e.file_path().eq(&index))
-                            {
-                                self.dropped_files.remove(i);
-                                self.image_data.remove(&index);
-                                self.data = None;
-                                self.rebuild_image_data();
-                            }
+                            self.image_data.remove(index);
+                            self.output = None;
+                            self.rebuild_image_data();
                         }
                     });
                 });
@@ -401,7 +416,7 @@ impl eframe::App for Application {
             egui::ScrollArea::vertical()
                 .id_salt("vertical_scroll")
                 .show(ui, |ui| {
-                    if let Some(Err(error)) = &self.data {
+                    if let Some(Err(error)) = &self.output {
                         let text = egui::RichText::new(format!("Error: {}", &error))
                             .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
                             .color(Color32::RED)
@@ -409,7 +424,7 @@ impl eframe::App for Application {
                         ui.add(egui::Label::new(text));
                         return;
                     }
-                    if self.dropped_files.is_empty() {
+                    if self.image_data.is_empty() {
                         ui.vertical_centered_justified(|ui| {
                             ui.add_space(50.0);
                             ui.add(
@@ -422,17 +437,14 @@ impl eframe::App for Application {
                             );
                         });
                     }
-                    let Some(image) = &self.image else {
-                        return;
-                    };
-                    let Some(Ok(data)) = &self.data else {
+                    let Some(Ok(data)) = &self.output else {
                         return;
                     };
                     ui.vertical_centered_justified(|ui| {
                         egui::Frame::canvas(&ctx.style()).show(ui, |ui| {
                             ui.add_space(10.0);
                             ui.heading(
-                                egui::RichText::new("Crated atlas").color(MY_ACCENT_COLOR32),
+                                egui::RichText::new("Created atlas").color(MY_ACCENT_COLOR32),
                             );
                             ui.add_space(10.0);
                             ui.label(format!(
@@ -490,10 +502,9 @@ impl eframe::App for Application {
                                 });
                             ui.add_space(10.0);
                             ui.separator();
-                            ui.add(image.clone());
+                            ui.add(Image::from_uri("bytes://output.png"));
                             ui.separator();
-                            ui.add_space(10.0);
-                            ui.add_space(10.0);
+                            ui.add_space(20.0);
                         });
                     });
                 });
