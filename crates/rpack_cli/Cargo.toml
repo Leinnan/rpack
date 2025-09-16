@@ -5,17 +5,18 @@ description = "CLI application for generating rpack atlases"
 repository = "https://github.com/Leinnan/rpack.git"
 homepage = "https://github.com/Leinnan/rpack"
 license = "MIT OR Apache-2.0"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 
 [features]
 default = ["cli", "dds"]
-cli = ["dep:clap", "dep:glob"]
+cli = ["dep:clap", "dep:glob", "config_ext"]
 basis = ["dep:basis-universal"]
 dds = ["dep:image_dds"]
+config_ext = ["dep:glob"]
 
 [dependencies]
-bevy_rpack = { default-features = false, path = "../bevy_rpack", version = "0.2" }
+bevy_rpack = { default-features = false, path = "../bevy_rpack", version = "0.3" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 texture_packer = { workspace = true }

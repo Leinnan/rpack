@@ -1,4 +1,6 @@
 #![doc = include_str!("../README.md")]
+extern crate alloc;
+use alloc::borrow::Cow;
 
 #[cfg(feature = "bevy")]
 /// Contains the Bevy plugin for handling `Rpack` assets and atlases.
@@ -50,4 +52,41 @@ pub struct AtlasAsset {
     pub filename: String,
     /// A collection of frames contained within the texture atlas.
     pub frames: Vec<AtlasFrame>,
+    /// Metadata about the atlas.
+    #[cfg_attr(feature = "bevy", reflect(default))]
+    #[serde(default, skip_serializing_if = "AtlasMetadata::skip_serialization")]
+    pub metadata: AtlasMetadata,
+}
+
+/// Represents metadata associated with the texture atlas format.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "bevy", derive(bevy::prelude::Reflect))]
+pub struct AtlasMetadata {
+    /// The version of the texture atlas format.
+    pub format_version: u32,
+    /// The name of the application that created the atlas.
+    pub app: Cow<'static, str>,
+    /// The version of the application that created the atlas.
+    pub app_version: Cow<'static, str>,
+    /// Whether to skip serialization of the metadata.
+    #[serde(skip_serializing, default)]
+    pub skip_serialization: bool,
+}
+
+impl AtlasMetadata {
+    /// Returns true if the metadata should be skipped during serialization.
+    pub fn skip_serialization(&self) -> bool {
+        self.skip_serialization
+    }
+}
+
+impl Default for AtlasMetadata {
+    fn default() -> Self {
+        Self {
+            format_version: 1,
+            app: Cow::Borrowed("rpack"),
+            app_version: Cow::Borrowed(env!("CARGO_PKG_VERSION")),
+            skip_serialization: false,
+        }
+    }
 }

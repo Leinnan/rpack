@@ -1,3 +1,6 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+
 use egui::DroppedFile;
 use image::DynamicImage;
 use rpack_cli::ImageFile;
@@ -37,6 +40,16 @@ impl DroppedFileHelper for std::fs::DirEntry {
 
     fn dynamic_image(&self) -> Option<DynamicImage> {
         ImageImporter::import_from_file(&self.path()).ok()
+    }
+}
+#[cfg(not(target_arch = "wasm32"))]
+impl DroppedFileHelper for PathBuf {
+    fn file_path(&self) -> String {
+        self.display().to_string()
+    }
+
+    fn dynamic_image(&self) -> Option<DynamicImage> {
+        ImageImporter::import_from_file(self.as_path()).ok()
     }
 }
 

@@ -1,8 +1,8 @@
-use bevy_rpack::{AtlasFrame, SerializableRect};
+use bevy_rpack::{AtlasFrame, AtlasMetadata, SerializableRect};
 use image::DynamicImage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(all(feature = "cli", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "config_ext", not(target_arch = "wasm32")))]
 use std::io::Write;
 use std::{
     ffi::OsStr,
@@ -19,7 +19,7 @@ pub struct Spritesheet {
     pub atlas_asset_json: Value,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ImageFile {
     pub id: String,
     pub image: DynamicImage,
@@ -67,6 +67,15 @@ where
         }
     }
 
+    // Ensure the prefix ends at a directory boundary
+    if !prefix.is_empty() && !prefix.ends_with('/') && !prefix.ends_with('\\') {
+        if let Some(last_slash) = prefix.rfind('/') {
+            prefix.truncate(last_slash + 1);
+        } else if let Some(last_backslash) = prefix.rfind('\\') {
+            prefix.truncate(last_backslash + 1);
+        }
+    }
+
     prefix
 }
 
@@ -108,21 +117,43 @@ pub enum SpritesheetError {
     FailedToPackImage,
 }
 
+/// Configuration for building a `Spritesheet`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpritesheetBuildConfig {
+    /// Configuration for the texture packer.
+    pub packer_config: TexturePackerConfig,
+    /// Whether to skip metadata serialization.
+    pub skip_metadata_serialization: bool,
+}
+
+impl From<TexturePackerConfig> for SpritesheetBuildConfig {
+    fn from(config: TexturePackerConfig) -> Self {
+        Self {
+            packer_config: config,
+            skip_metadata_serialization: false,
+        }
+    }
+}
+
 impl Spritesheet {
     pub fn build<P>(
-        config: TexturePackerConfig,
-        images: &[ImageFile],
+        config: impl Into<SpritesheetBuildConfig>,
+        images: &[&ImageFile],
         filename: P,
     ) -> Result<Self, SpritesheetError>
     where
         P: AsRef<str>,
     {
+        let SpritesheetBuildConfig {
+            packer_config: config,
+            skip_metadata_serialization,
+        } = config.into();
         let mut packer = TexturePacker::new_skyline(config);
         for image in images.iter() {
             if !packer.can_pack(&image.image) {
                 return Err(SpritesheetError::CannotPackImage(image.id.clone()));
             }
-            if let Err(_err) = packer.pack_own(&image.id, image.image.clone()) {
+            if let Err(_err) = packer.pack_ref(&image.id, &image.image) {
                 return Err(SpritesheetError::FailedToPackImage);
             }
         }
@@ -131,6 +162,10 @@ impl Spritesheet {
         };
 
         let mut atlas_asset = bevy_rpack::AtlasAsset {
+            metadata: AtlasMetadata {
+                skip_serialization: skip_metadata_serialization,
+                ..Default::default()
+            },
             size: [image_data.width(), image_data.height()],
             filename: filename.as_ref().to_owned(),
             frames: packer
@@ -247,11 +282,37 @@ pub struct TilemapGenerationConfig {
     /// Size of the padding on the outer edge of the packed image in pixel. Default value is `0`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub border_padding: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub skip_serializing_metadata: Option<bool>,
     #[serde(skip)]
     pub working_dir: Option<PathBuf>,
 }
 
-#[cfg(all(feature = "cli", not(target_arch = "wasm32")))]
+impl From<&TilemapGenerationConfig> for TexturePackerConfig {
+    fn from(config: &TilemapGenerationConfig) -> Self {
+        texture_packer::TexturePackerConfig {
+            max_width: config.size.unwrap_or(2048),
+            max_height: config.size.unwrap_or(2048),
+            allow_rotation: false,
+            force_max_dimensions: true,
+            border_padding: config.border_padding.unwrap_or(0),
+            texture_padding: config.texture_padding.unwrap_or(2),
+            texture_extrusion: 0,
+            trim: false,
+            texture_outlines: false,
+        }
+    }
+}
+impl From<&TilemapGenerationConfig> for SpritesheetBuildConfig {
+    fn from(config: &TilemapGenerationConfig) -> Self {
+        SpritesheetBuildConfig {
+            packer_config: config.into(),
+            skip_metadata_serialization: config.skip_serializing_metadata.unwrap_or_default(),
+        }
+    }
+}
+
+#[cfg(all(feature = "config_ext", not(target_arch = "wasm32")))]
 impl TilemapGenerationConfig {
     pub fn read_from_file<P>(path: P) -> anyhow::Result<TilemapGenerationConfig>
     where
@@ -263,7 +324,24 @@ impl TilemapGenerationConfig {
         Ok(config)
     }
 
-    pub fn generate(&self) -> anyhow::Result<()> {
+    pub fn get_file_paths_and_prefix(&self) -> (Vec<PathBuf>, String) {
+        let working_dir = self.working_dir();
+        let lossy_working_dir = working_dir.to_string_lossy();
+        let mut file_paths: Vec<PathBuf> = self
+            .asset_patterns
+            .iter()
+            .flat_map(|pattern| {
+                let p = format!("{}/{}", lossy_working_dir, pattern);
+                glob::glob(&p).expect("Wrong pattern for assets").flatten()
+            })
+            .filter(|e| e.is_file())
+            .collect();
+        file_paths.sort();
+        let prefix = get_common_prefix(&file_paths);
+        (file_paths, prefix)
+    }
+
+    pub fn working_dir(&self) -> PathBuf {
         let dir = match &self.working_dir {
             None => std::env::current_dir().expect("msg"),
             Some(p) => {
@@ -274,19 +352,15 @@ impl TilemapGenerationConfig {
                 }
             }
         };
-        let working_dir = std::path::absolute(dir)?;
+        let working_dir = std::path::absolute(dir).unwrap_or_default();
 
-        let mut file_paths: Vec<PathBuf> = self
-            .asset_patterns
-            .iter()
-            .flat_map(|pattern| {
-                let p = format!("{}/{}", working_dir.to_string_lossy(), pattern);
-                glob::glob(&p).expect("Wrong pattern for assets").flatten()
-            })
-            .filter(|e| e.is_file())
-            .collect();
-        file_paths.sort();
-        let prefix = get_common_prefix(&file_paths);
+        working_dir
+    }
+
+    pub fn generate(&self) -> anyhow::Result<()> {
+        let working_dir = self.working_dir();
+
+        let (file_paths, prefix) = self.get_file_paths_and_prefix();
         let images: Vec<ImageFile> = file_paths
             .iter()
             .flat_map(|f| {
@@ -298,6 +372,7 @@ impl TilemapGenerationConfig {
                 ImageFile::at_path(f, id)
             })
             .collect();
+        let borrowed_images: Vec<&ImageFile> = images.iter().map(|s| s).collect();
         let atlas_image_path = working_dir.join(format!(
             "{}{}",
             self.output_path,
@@ -309,21 +384,7 @@ impl TilemapGenerationConfig {
             .to_string_lossy()
             .to_string();
         let atlas_config_path = working_dir.join(format!("{}.rpack.json", self.output_path));
-        let spritesheet = Spritesheet::build(
-            texture_packer::TexturePackerConfig {
-                max_width: self.size.unwrap_or(2048),
-                max_height: self.size.unwrap_or(2048),
-                allow_rotation: false,
-                force_max_dimensions: true,
-                border_padding: self.border_padding.unwrap_or(0),
-                texture_padding: self.texture_padding.unwrap_or(2),
-                texture_extrusion: 0,
-                trim: false,
-                texture_outlines: false,
-            },
-            &images,
-            &atlas_filename,
-        )?;
+        let spritesheet = Spritesheet::build(self, &borrowed_images, &atlas_filename)?;
 
         if Path::new(&atlas_config_path).exists() {
             std::fs::remove_file(&atlas_config_path).expect("Could not remove the old file");

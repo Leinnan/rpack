@@ -14,11 +14,9 @@ eframe = { version = "0.32", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
-    "persistence",   # Enable restoring app state when restarting the app.
 ] }
 log = "0.4"
 egui_json_tree = "0.13"
-rpack_cli = { default-features = false, path = "../rpack_cli", version = "0.2" }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
@@ -33,9 +31,11 @@ anyhow = "1"
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11"
+rpack_cli = { default-features = false, features = ["config_ext"], path = "../rpack_cli", version = "0.3" }
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+rpack_cli = { default-features = false, path = "../rpack_cli", version = "0.3" }
 wasm-bindgen-futures = "0.4"
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = [

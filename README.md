@@ -21,7 +21,7 @@ Repository contains example how to use plugin in Bevy.
 [![Crates.io](https://img.shields.io/crates/v/rpack_cli)](https://crates.io/crates/rpack_cli)
 [![Documentation](https://docs.rs/rpack_cli/badge.svg)](https://docs.rs/rpack_cli)
 
-Command line interface for generating tilemaps. 
+Command line interface for generating tilemaps.
 
 ```sh
 Build rpack tilemaps with ease
@@ -74,17 +74,17 @@ rpack tools provides and work with two json based files.
 
 ### Atlas files
 
-Tilemaps are using `.rpack.json` extension. 
+Tilemaps are using `.rpack.json` extension.
 
 Fields:
 
 - `size`: two element array- width and height of the tilemap
 - `filename`: string- path to the atlas image file, relative to the config file
 - `frames`: array- contain info about each frame in tilemap, contains `key` string field and `frame` field that is made up from fields:
-  - `h`- image height 
+  - `h`- image height
   - `w`- image width
-  - `x`- x start pos of the image in the tilemap 
-  - `y`- y start pos of the image in the tilemap 
+  - `x`- x start pos of the image in the tilemap
+  - `y`- y start pos of the image in the tilemap
 
 Example:
 
@@ -120,7 +120,7 @@ Example:
 
 ### Generation config files
 
-Config files are using `.rpack_gen.json` extension. 
+Config files are using `.rpack_gen.json` extension.
 
 Fields:
 
@@ -130,7 +130,7 @@ Fields:
 - `size`: optional(defaults to `2048`), size of the tilemap image
 - `texture_padding`: optional(defaults to `2`), size of the padding between frames in pixel
 - `border_padding`: optional(defaults to `0`), size of the padding on the outer edge of the packed image in pixel
-
+- `metadata`: optional, struct containing metadata about the program used to generate the tilemap and version number, stored for the future in case of future breaking changes
 
 Example:
 
@@ -147,6 +147,15 @@ Example:
   "format": "Png",
   "size": 512,
   "texture_padding": 2,
-  "border_padding": 2
+  "border_padding": 2,
+  "metadata": {
+    "app": "rpack",
+    "app_version": "0.3.0",
+    "format_version": 1
+  },
+  "size": [
+    512,
+    512
+  ]
 }
 ```

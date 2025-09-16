@@ -1,5 +1,10 @@
-use egui::{CollapsingHeader, Color32, FontFamily, FontId, Grid, Image, Label, RichText};
-use rpack_cli::{ImageFile, Spritesheet, SpritesheetError};
+use std::path::PathBuf;
+
+use egui::{
+    CollapsingHeader, Color32, FontFamily, FontId, Grid, Image, Label, Layout, RichText,
+    util::undoer::Undoer,
+};
+use rpack_cli::{ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError};
 use texture_packer::TexturePackerConfig;
 
 use crate::helpers::DroppedFileHelper;
@@ -9,27 +14,58 @@ pub const HEADER_HEIGHT: f32 = 45.0;
 pub const TOP_BUTTON_WIDTH: f32 = 150.0;
 pub const GIT_HASH: &str = env!("GIT_HASH");
 
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Application {
-    #[serde(skip)]
-    config: TexturePackerConfig,
-    #[serde(skip)]
-    output: Option<SpriteSheetResult>,
-    #[serde(skip)]
-    name: String,
-    #[serde(skip)]
-    min_size: [u32; 2],
-    #[serde(skip)]
-    max_size: u32,
-    #[serde(skip)]
-    image_data: Vec<AppImageData>,
+    data: ApplicationData,
+    output: Option<Spritesheet>,
+    last_error: Option<SpritesheetError>,
+    undoer: Undoer<ApplicationData>,
 }
 
-type SpriteSheetResult = Result<Spritesheet, SpritesheetError>;
+#[derive(serde::Deserialize, serde::Serialize, Default, Clone)]
+pub struct ApplicationData {
+    #[serde(skip, default)]
+    image_data: Vec<AppImageData>,
+    #[serde(skip, default)]
+    config: TexturePackerConfig,
+    settings: Settings,
+}
+impl PartialEq for ApplicationData {
+    fn eq(&self, other: &Self) -> bool {
+        self.image_data == other.image_data
+            && self.config.allow_rotation == other.config.allow_rotation
+            && self.config.border_padding == other.config.border_padding
+            && self.config.force_max_dimensions == other.config.force_max_dimensions
+            && self.config.max_height == other.config.max_height
+            && self.config.max_width == other.config.max_width
+            && self.config.texture_extrusion == other.config.texture_extrusion
+            && self.config.texture_outlines == other.config.texture_outlines
+            && self.config.texture_padding == other.config.texture_padding
+            && self.config.trim == other.config.trim
+            && self.settings == other.settings
+    }
+}
 
-#[derive(Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
+pub struct Settings {
+    pub filename: String,
+    pub size: u32,
+    #[serde(skip)]
+    min_size: [u32; 2],
+    pub skip_metadata_serialization: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            filename: String::from("Tilemap"),
+            size: 512,
+            min_size: [32, 32],
+            skip_metadata_serialization: false,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct AppImageData {
     pub width: u32,
     pub height: u32,
@@ -54,27 +90,29 @@ impl AppImageData {
 impl Default for Application {
     fn default() -> Self {
         Self {
-            config: TexturePackerConfig {
-                max_width: 512,
-                max_height: 512,
-                allow_rotation: false,
-                border_padding: 2,
-                trim: false,
-                force_max_dimensions: true,
-                ..Default::default()
-            },
+            data: Default::default(),
+            undoer: Default::default(),
             output: None,
-            max_size: 4096,
-            name: String::from("Tilemap"),
-            min_size: [32, 32],
-            image_data: Vec::new(),
+            last_error: None,
         }
     }
 }
 
 impl Application {
+    pub fn read_config(&mut self, config: rpack_cli::TilemapGenerationConfig) {
+        self.data.settings.size = config.size.unwrap_or(512);
+        self.data.config = (&config).into();
+
+        let (file_paths, prefix) = config.get_file_paths_and_prefix();
+        self.data.image_data.clear();
+        self.data
+            .image_data
+            .extend(file_paths.iter().flat_map(|f| f.create_image(&prefix)));
+        self.rebuild_image_data();
+    }
     pub fn get_common_prefix(&self) -> String {
         let file_paths: Vec<String> = self
+            .data
             .image_data
             .iter()
             .map(|image| image.path.clone())
@@ -83,65 +121,82 @@ impl Application {
     }
     pub fn rebuild_image_data(&mut self) {
         let prefix = self.get_common_prefix();
-        self.image_data
+        self.data
+            .image_data
             .iter_mut()
             .for_each(|f| f.update_id(prefix.as_str()));
         self.update_min_size();
     }
     pub fn update_min_size(&mut self) {
-        if let Some(file) = self.image_data.iter().max_by(|a, b| a.width.cmp(&b.width)) {
-            self.min_size[0] = file.width;
-        } else {
-            self.min_size[0] = 32;
-        }
-        if let Some(file) = self
+        self.data.settings.min_size[0] = self
+            .data
+            .image_data
+            .iter()
+            .max_by(|a, b| a.width.cmp(&b.width))
+            .map_or(32, |s| s.width);
+        self.data.settings.min_size[1] = self
+            .data
             .image_data
             .iter()
             .max_by(|a, b| a.height.cmp(&b.height))
-        {
-            self.min_size[1] = file.height;
-        } else {
-            self.min_size[1] = 32;
+            .map_or(32, |s| s.height);
+        for nr in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
+            if nr >= self.data.settings.min_size[0] && nr >= self.data.settings.min_size[1] {
+                self.data.settings.min_size[0] = nr;
+                self.data.settings.min_size[1] = nr;
+                break;
+            }
         }
     }
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, config_file: Option<String>) -> Self {
         crate::fonts::setup_custom_fonts(&cc.egui_ctx);
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        let mut app = Self::default();
+        if let Some(config_file) = config_file {
+            if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(&config_file) {
+                app.data.settings.filename = PathBuf::from(config_file)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .replace(".rpack_gen.json", "");
+                app.read_config(config);
+            }
         }
 
-        Default::default()
+        app
     }
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
+        self.last_error = None;
         self.output = None;
         ctx.forget_image("bytes://output.png");
-        let images: Vec<ImageFile> = self
-            .image_data
-            .iter()
-            .map(|file| file.data.clone())
-            .collect();
+        if self.data.image_data.is_empty() {
+            return;
+        }
+        let images: Vec<&ImageFile> = self.data.image_data.iter().map(|file| &file.data).collect();
 
-        for size in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
-            if size < self.min_size[0] || size < self.min_size[1] {
-                continue;
-            }
-            if size > self.max_size {
+        for multiplier in 1..10 {
+            let size = multiplier * self.data.settings.min_size[0];
+            if size > self.data.settings.size {
                 break;
             }
             let config = TexturePackerConfig {
                 max_width: size,
                 max_height: size,
-                ..self.config
+                ..self.data.config
             };
-            match Spritesheet::build(config, &images, format!("{}.png", &self.name)) {
+            match Spritesheet::build(
+                SpritesheetBuildConfig {
+                    packer_config: config,
+                    skip_metadata_serialization: self.data.settings.skip_metadata_serialization,
+                },
+                &images,
+                format!("{}.png", &self.data.settings.filename),
+            ) {
                 Ok(data) => {
                     let mut out_vec = vec![];
                     data.image_data
@@ -152,23 +207,26 @@ impl Application {
                         .unwrap();
                     ctx.include_bytes("bytes://output.png", out_vec);
 
-                    self.output = Some(Ok(data));
+                    self.output = Some(data);
                     break;
                 }
                 Err(e) => {
-                    self.output = Some(Err(e));
+                    self.last_error = Some(e);
                 }
             }
+        }
+        if self.output.is_some() {
+            self.last_error = None;
         }
         ctx.request_repaint();
     }
 
     fn save_json(&self) -> Result<(), String> {
-        let Some(Ok(spritesheet)) = &self.output else {
+        let Some(spritesheet) = &self.output else {
             return Err("Data is incorrect".to_owned());
         };
         let data = spritesheet.atlas_asset_json.to_string();
-        let filename = format!("{}.rpack.json", self.name);
+        let filename = format!("{}.rpack.json", self.data.settings.filename);
         #[cfg(not(target_arch = "wasm32"))]
         {
             let path_buf = rfd::FileDialog::new()
@@ -204,10 +262,10 @@ impl Application {
     }
 
     fn save_atlas(&self) -> Result<(), String> {
-        let Some(Ok(spritesheet)) = &self.output else {
+        let Some(spritesheet) = &self.output else {
             return Err("Data is incorrect".to_owned());
         };
-        let filename = format!("{}.png", self.name);
+        let filename = format!("{}.png", self.data.settings.filename);
         #[cfg(not(target_arch = "wasm32"))]
         {
             let path_buf = rfd::FileDialog::new()
@@ -253,17 +311,10 @@ impl Application {
 }
 
 impl eframe::App for Application {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
-
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // if self.dropped_files.is_empty() && self.image.is_some() {
-        //     self.image = None;
-        //     self.data = None;
-        // }
+        self.undoer
+            .feed_state(ctx.input(|input| input.time), &self.data);
         egui::TopBottomPanel::top("topPanel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
@@ -277,48 +328,90 @@ impl eframe::App for Application {
                 });
             });
         ctx.input(|i| {
-            if !i.raw.dropped_files.is_empty() {
-                for file in i.raw.dropped_files.iter() {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    if let Some(path) = &file.path {
-                        if path.is_dir() {
-                            let Ok(dir) = path.read_dir() else {
-                                continue;
-                            };
-                            for entry in dir {
-                                if let Ok(entry) = entry {
-                                    let Ok(metadata) = entry.metadata() else {
+            if i.raw.dropped_files.is_empty() {
+                return;
+            }
+            for file in i.raw.dropped_files.iter() {
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(path) = &file.path {
+                    if path.is_dir() {
+                        let Ok(dir) = path.read_dir() else {
+                            continue;
+                        };
+                        for entry in dir {
+                            if let Ok(entry) = entry {
+                                let Ok(metadata) = entry.metadata() else {
+                                    continue;
+                                };
+                                if metadata.is_file() {
+                                    let Some(dyn_image) = entry.create_image("") else {
                                         continue;
                                     };
-                                    if metadata.is_file() {
-                                        let Some(dyn_image) = entry.create_image("") else {
-                                            continue;
-                                        };
-                                        self.image_data.push(dyn_image);
-                                    }
+                                    self.data.image_data.push(dyn_image);
                                 }
                             }
                         }
+                    } else {
+                        let Some(path) = &file.path else {
+                            continue;
+                        };
+                        if path.to_string_lossy().ends_with(".rpack_gen.json") {
+                            if let Ok(config) =
+                                rpack_cli::TilemapGenerationConfig::read_from_file(&path)
+                            {
+                                self.data.settings.filename = path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .replace(".rpack_gen.json", "");
+                                self.read_config(config);
+                                break;
+                            }
+                        }
                     }
-                    let Some(dyn_image) = file.create_image("") else {
-                        continue;
-                    };
-                    self.image_data.push(dyn_image);
                 }
-                self.output = None;
-                self.rebuild_image_data();
+                let Some(dyn_image) = file.create_image("") else {
+                    continue;
+                };
+                self.data.image_data.push(dyn_image);
             }
+            self.output = None;
+            self.rebuild_image_data();
         });
         egui::TopBottomPanel::bottom("bottom_panel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
-                powered_by_egui_and_eframe(ui);
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(5.0);
+                    ui.add_enabled_ui(self.undoer.has_undo(&self.data), |ui| {
+                        if ui.button("⮪").on_hover_text("Go back").clicked() {
+                            if let Some(action) = self.undoer.undo(&self.data) {
+                                self.data = action.clone();
+                                self.rebuild_image_data();
+                                self.build_atlas(ui.ctx());
+                            }
+                        }
+                    });
+                    ui.add_enabled_ui(self.undoer.has_redo(&self.data), |ui| {
+                        if ui.button("⮫").on_hover_text("Redo").clicked() {
+                            if let Some(action) = self.undoer.redo(&self.data) {
+                                self.data = action.clone();
+                                self.rebuild_image_data();
+                                self.build_atlas(ui.ctx());
+                            }
+                        }
+                    });
+                    ui.add_space(5.0);
+                    powered_by_egui_and_eframe(ui);
+                });
+                ui.add_space(5.0);
             });
         egui::SidePanel::right("right")
             .min_width(200.0)
             .max_width(400.0)
             .frame(egui::Frame::canvas(&ctx.style()))
-            .show_animated(ctx, !self.image_data.is_empty(), |ui| {
+            .show_animated(ctx, !self.data.image_data.is_empty(), |ui| {
             egui::ScrollArea::vertical()
             .id_salt("rightPanel_scroll")
             .show(ui, |ui| {
@@ -327,29 +420,31 @@ impl eframe::App for Application {
                     .show(ui, |ui| {
                         ui.vertical_centered_justified(|ui|{
                                 let label = ui.label("Tilemap filename");
-                                ui.text_edit_singleline(&mut self.name).labelled_by(label.id);
+                                ui.text_edit_singleline(&mut self.data.settings.filename).labelled_by(label.id);
                                 ui.add_space(10.0);
                             ui.add(
-                                egui::Slider::new(&mut self.max_size, self.min_size[0]..=4096)
+                                egui::Slider::new(&mut self.data.settings.size, self.data.settings.min_size[0]..=4096)
                                 .step_by(32.0)
                                     .text("Max size"),
                             );
                             ui.add(
-                                egui::Slider::new(&mut self.config.border_padding, 0..=10)
+                                egui::Slider::new(&mut self.data.config.border_padding, 0..=10)
                                     .text("Border Padding"),
                             );
                             ui.add(
-                                egui::Slider::new(&mut self.config.texture_padding, 0..=10)
+                                egui::Slider::new(&mut self.data.config.texture_padding, 0..=10)
                                     .text("Texture Padding"),
                             );
                             // ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
                             // .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
-                            ui.checkbox(&mut self.config.texture_outlines, "Texture Outlines")
+                            ui.checkbox(&mut self.data.config.texture_outlines, "Texture Outlines")
             .on_hover_text("Draw the red line on the edge of the each frames. Useful for debugging.");
+                            ui.checkbox(&mut self.data.settings.skip_metadata_serialization, "Skip Metadata Serialization")
+            .on_hover_text("Skip metadata serialization.");
                             // ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
                             ui.add_space(10.0);
 
-                            ui.add_enabled_ui(!self.image_data.is_empty(), |ui| {
+                            ui.add_enabled_ui(!self.data.image_data.is_empty(), |ui| {
                                     if ui
                                     .add_sized([TOP_BUTTON_WIDTH, 30.0], egui::Button::new("Build atlas"))
                                     .clicked()
@@ -367,8 +462,8 @@ impl eframe::App for Application {
                     .show_unindented(ui, |ui| {
                         ui.horizontal(|ui|{
 
-                            if !self.image_data.is_empty() && ui.button("clear list").clicked() {
-                                self.image_data.clear();
+                            if !self.data.image_data.is_empty() && ui.button("clear list").clicked() {
+                                self.data.image_data.clear();
                                 self.output = None;
                                 self.update_min_size();
                             }
@@ -379,7 +474,7 @@ impl eframe::App for Application {
                                     for file in files.iter() {
                                         let Ok(image) = texture_packer::importer::ImageImporter::import_from_file(file) else { continue };
                                         let id = crate::helpers::id_from_path(&file.to_string_lossy());
-                                        self.image_data.push(AppImageData { width: image.width(), height: image.height(), data: ImageFile { id: id, image }, path: file.to_string_lossy().to_string() });
+                                        self.data.image_data.push(AppImageData { width: image.width(), height: image.height(), data: ImageFile { id: id, image }, path: file.to_string_lossy().to_string() });
                                     }
                                     self.rebuild_image_data();
                                 }
@@ -393,7 +488,7 @@ impl eframe::App for Application {
                         };
                         Grid::new("Image List").num_columns(columns).striped(true).spacing((10.0,10.0)).show(ui, |ui|{
 
-                            for (index, file) in self.image_data.iter().enumerate() {
+                            for (index, file) in self.data.image_data.iter().enumerate() {
                                     if ui.button("x").clicked() {
                                         to_remove = Some(index);
                                     }
@@ -405,7 +500,7 @@ impl eframe::App for Application {
                             }
                         });
                         if let Some(index) = to_remove {
-                            self.image_data.remove(index);
+                            self.data.image_data.remove(index);
                             self.output = None;
                             self.rebuild_image_data();
                         }
@@ -413,18 +508,17 @@ impl eframe::App for Application {
                 });
             });
         egui::CentralPanel::default().show(ctx, |ui| {
+            if let Some(error) = &self.last_error {
+                let text = egui::RichText::new(format!("Error: {}", &error))
+                    .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
+                    .color(Color32::RED)
+                    .strong();
+                ui.add(egui::Label::new(text));
+            }
             egui::ScrollArea::vertical()
                 .id_salt("vertical_scroll")
                 .show(ui, |ui| {
-                    if let Some(Err(error)) = &self.output {
-                        let text = egui::RichText::new(format!("Error: {}", &error))
-                            .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
-                            .color(Color32::RED)
-                            .strong();
-                        ui.add(egui::Label::new(text));
-                        return;
-                    }
-                    if self.image_data.is_empty() {
+                    if self.data.image_data.is_empty() {
                         ui.vertical_centered_justified(|ui| {
                             ui.add_space(50.0);
                             ui.add(
@@ -437,7 +531,7 @@ impl eframe::App for Application {
                             );
                         });
                     }
-                    let Some(Ok(data)) = &self.output else {
+                    let Some(data) = &self.output else {
                         return;
                     };
                     ui.vertical_centered_justified(|ui| {
@@ -513,14 +607,17 @@ impl eframe::App for Application {
 }
 
 fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
+    ui.with_layout(Layout::right_to_left(egui::Align::Min), |ui| {
+        ui.add_space(10.0);
         ui.hyperlink_to(format!("Build: {}", GIT_HASH), env!("CARGO_PKG_HOMEPAGE"));
         egui::warn_if_debug_build(ui);
         ui.separator();
         egui::widgets::global_theme_preference_switch(ui);
         ui.separator();
         ui.spacing_mut().item_spacing.x = 0.0;
-        ui.label("Made by ");
         ui.hyperlink_to("Mev Lyshkin", "https://www.mevlyshkin.com/");
+        ui.add_space(10.0);
+        ui.label("Made by ");
+        ui.add_space((ui.available_width() - 10.0).max(15.0));
     });
 }
