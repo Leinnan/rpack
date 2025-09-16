@@ -118,7 +118,7 @@ pub enum SpritesheetError {
 }
 
 /// Configuration for building a `Spritesheet`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct SpritesheetBuildConfig {
     /// Configuration for the texture packer.
     pub packer_config: TexturePackerConfig,
