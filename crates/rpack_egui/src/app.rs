@@ -149,6 +149,7 @@ impl Application {
         }
     }
     /// Called once before the first frame.
+    #[allow(dead_code)]
     pub fn new(cc: &eframe::CreationContext<'_>, config_file: Option<String>) -> Self {
         crate::fonts::setup_custom_fonts(&cc.egui_ctx);
         // This is also where you can customize the look and feel of egui using
@@ -156,6 +157,7 @@ impl Application {
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
         let mut app = Self::default();
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(config_file) = config_file {
             if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(&config_file) {
                 app.data.settings.filename = PathBuf::from(config_file)
