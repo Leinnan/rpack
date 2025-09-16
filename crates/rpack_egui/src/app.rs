@@ -149,7 +149,7 @@ impl Application {
         }
     }
     /// Called once before the first frame.
-    #[allow(dead_code)]
+    #[allow(dead_code, unused_variables, unused_mut)]
     pub fn new(cc: &eframe::CreationContext<'_>, config_file: Option<String>) -> Self {
         crate::fonts::setup_custom_fonts(&cc.egui_ctx);
         // This is also where you can customize the look and feel of egui using
