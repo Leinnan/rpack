@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use egui::{
     CollapsingHeader, Color32, FontFamily, FontId, Grid, Image, Label, Layout, RichText,
     util::undoer::Undoer,
@@ -160,6 +158,7 @@ impl Application {
         let mut app = Self::default();
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(config_file) = config_file {
+            use std::path::PathBuf;
             if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(&config_file) {
                 app.data.settings.filename = PathBuf::from(config_file)
                     .file_name()
