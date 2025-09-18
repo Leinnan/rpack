@@ -26,6 +26,9 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-build-
       - uses: extractions/setup-just@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-bundle
       - name: Mac build
         if: startsWith(runner.os, 'macos')
         working-directory: crates/rpack_egui
