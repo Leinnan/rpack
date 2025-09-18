@@ -48,7 +48,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(rpack_egui::Application::new(cc)))),
+                Box::new(|cc| Ok(Box::new(rpack_egui::Application::new(cc, None)))),
             )
             .await;
 
