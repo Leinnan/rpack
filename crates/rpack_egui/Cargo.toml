@@ -45,3 +45,11 @@ web-sys = { version = "0.3", features = [
     "BlobPropertyBag",
 ] }
 js-sys = "0.3"
+
+[package.metadata.bundle]
+name = "Rpack"
+resources = ["static/resources/*"]
+identifier = "io.github.leinnan.rpack"
+osx_url_schemes = ["io.github.leinnan.rpack"]
+short_description = "Tilemap Editor"
+long_description = "Tilemap Editor built with egui in Rust"

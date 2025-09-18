@@ -1,0 +1,54 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-build-
+      - uses: extractions/setup-just@v2
+      - name: Mac build
+        if: startsWith(runner.os, 'macos')
+        working-directory: crates/rpack_egui
+        run: just create_mac_installer
+      - name: Regular installer
+        if: ${{ !startsWith(runner.os, 'macos') }}
+        working-directory: crates/rpack_egui
+        run: |
+          just create_installer
+          mkdir ../../artifacts
+          cp RpackInstaller.pkg ../../artifacts/RpackInstaller.pkg
+      - uses: actions/upload-artifact@v4
+        if: startsWith(runner.os, 'macos')
+        with:
+          name: macos-installer
+          path: artifacts
+      - name: Copy artifacts
+        if: ${{ startsWith(runner.os, 'windows') }}
+        run: |
+          mkdir artifacts
+          cp target/release/rpack_egui.exe artifacts/rpack_egui.exe
+      - uses: actions/upload-artifact@v4
+        if: startsWith(runner.os, 'windows')
+        with:
+          name: windows-exe
+          path: artifacts

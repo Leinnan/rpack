@@ -9,3 +9,5 @@ result.png
 /.vscode
 Cargo.lock
 .DS_Store
+Rpack.app
+crates/rpack_egui/static/resources
