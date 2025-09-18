@@ -39,10 +39,15 @@ jobs:
           mkdir artifacts
           mv crates/rpack_egui/RpackInstaller.pkg artifacts/RpackInstaller.pkg
       - name: Regular installer
-        if: ${{ !startsWith(runner.os, 'macos') }}
+        if: ${{ startsWith(runner.os, 'ubuntu') }}
         working-directory: crates/rpack_egui
         run: |
           just create_installer
+      - name: Windows build
+        if: ${{ startsWith(runner.os, 'windows') }}
+        working-directory: crates/rpack_egui
+        run: |
+          cargo build --release
       - name: Copy artifacts
         if: ${{ startsWith(runner.os, 'windows') }}
         run: |
