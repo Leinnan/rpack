@@ -99,6 +99,7 @@ impl Default for Application {
 }
 
 impl Application {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn read_config(&mut self, config: rpack_cli::TilemapGenerationConfig) {
         self.data.settings.size = config.size.unwrap_or(512);
         self.data.config = (&config).into();

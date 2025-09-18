@@ -5,9 +5,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-    let args: Vec<String> = std::env::args().collect();
-    let file_arg: Option<String> = if args.len() > 1 {
-        Some(args[1].clone())
+    let file_arg: Option<String> = if std::env::args().len() > 1 {
+        std::env::args().skip(1).next()
     } else {
         None
     };
