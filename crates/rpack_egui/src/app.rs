@@ -1,66 +1,86 @@
+use crossbeam::queue::SegQueue;
+use egui::Grid;
+use egui::containers::menu::MenuButton;
 use egui::{
-    CollapsingHeader, Color32, FontFamily, FontId, Grid, Image, Label, Layout, RichText,
+    Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout, RichText, Sense, Slider, Ui,
     util::undoer::Undoer,
 };
-use rpack_cli::{ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError};
-use texture_packer::TexturePackerConfig;
+use egui_extras::{Column, TableBuilder};
+use once_cell::sync::Lazy;
+use rpack_cli::TilemapGenerationConfig;
+use rpack_cli::{
+    ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError, packer::SkylinePacker,
+};
+use texture_packer::{Rect, TexturePackerConfig};
 
 use crate::helpers::DroppedFileHelper;
+static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(|| SegQueue::new());
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
-pub const TOP_SIDE_MARGIN: f32 = 10.0;
-pub const HEADER_HEIGHT: f32 = 45.0;
-pub const TOP_BUTTON_WIDTH: f32 = 150.0;
 pub const GIT_HASH: &str = env!("GIT_HASH");
+pub const VERSION: &str = concat!(" v ", env!("CARGO_PKG_VERSION"), " ");
+
+pub const ICON_DATA: &[u8] = include_bytes!("../static/base_icon.png");
+
+#[derive(Clone)]
+#[allow(dead_code)]
+pub enum AppImageAction {
+    Add(AppImageData),
+    Replace(Vec<AppImageData>),
+    Remove(usize),
+    UpdateSpriteSheet(Result<Spritesheet, SpritesheetError>),
+    Clear,
+    RebuildAtlas,
+    #[cfg(not(target_arch = "wasm32"))]
+    ReadFromConfig(TilemapGenerationConfig, PathBuf),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+use std::{future::Future, ops::RangeInclusive};
+
+#[cfg(not(target_arch = "wasm32"))]
+fn execute<F: Future<Output = ()> + Send + 'static>(f: F) {
+    // this is stupid... use any executor of your choice instead
+    std::thread::spawn(move || futures::executor::block_on(f));
+}
+#[cfg(target_arch = "wasm32")]
+fn execute<F: Future<Output = ()> + 'static>(f: F) {
+    wasm_bindgen_futures::spawn_local(f);
+}
+
+pub enum SpriteSheetState {
+    Empty,
+    Building,
+    Ok(Spritesheet),
+}
+impl SpriteSheetState {
+    pub fn is_ok(&self) -> bool {
+        matches!(self, SpriteSheetState::Ok(_))
+    }
+    pub fn is_none(&self) -> bool {
+        matches!(self, SpriteSheetState::Empty)
+    }
+    pub fn is_building(&self) -> bool {
+        matches!(self, SpriteSheetState::Building)
+    }
+}
 
 pub struct Application {
     data: ApplicationData,
-    output: Option<Spritesheet>,
+    output: SpriteSheetState,
     last_error: Option<SpritesheetError>,
     undoer: Undoer<ApplicationData>,
+    last_editor_paths: Vec<String>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Default, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Default, Clone, PartialEq)]
 pub struct ApplicationData {
     #[serde(skip, default)]
     image_data: Vec<AppImageData>,
     #[serde(skip, default)]
-    config: TexturePackerConfig,
-    settings: Settings,
-}
-impl PartialEq for ApplicationData {
-    fn eq(&self, other: &Self) -> bool {
-        self.image_data == other.image_data
-            && self.config.allow_rotation == other.config.allow_rotation
-            && self.config.border_padding == other.config.border_padding
-            && self.config.force_max_dimensions == other.config.force_max_dimensions
-            && self.config.max_height == other.config.max_height
-            && self.config.max_width == other.config.max_width
-            && self.config.texture_extrusion == other.config.texture_extrusion
-            && self.config.texture_outlines == other.config.texture_outlines
-            && self.config.texture_padding == other.config.texture_padding
-            && self.config.trim == other.config.trim
-            && self.settings == other.settings
-    }
-}
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
-pub struct Settings {
-    pub filename: String,
-    pub size: u32,
-    #[serde(skip)]
-    min_size: [u32; 2],
-    pub skip_metadata_serialization: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            filename: String::from("Tilemap"),
-            size: 512,
-            min_size: [32, 32],
-            skip_metadata_serialization: false,
-        }
-    }
+    settings: TilemapGenerationConfig,
+    #[serde(skip, default)]
+    min_size: u32,
 }
 
 #[derive(Clone, PartialEq)]
@@ -90,8 +110,9 @@ impl Default for Application {
         Self {
             data: Default::default(),
             undoer: Default::default(),
-            output: None,
+            output: SpriteSheetState::Empty,
             last_error: None,
+            last_editor_paths: Vec::new(),
         }
     }
 }
@@ -99,15 +120,15 @@ impl Default for Application {
 impl Application {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_config(&mut self, config: rpack_cli::TilemapGenerationConfig) {
-        self.data.settings.size = config.size.unwrap_or(512);
-        self.data.config = (&config).into();
+        self.data.settings = config;
 
-        let (file_paths, prefix) = config.get_file_paths_and_prefix();
-        self.data.image_data.clear();
-        self.data
-            .image_data
-            .extend(file_paths.iter().flat_map(|f| f.create_image(&prefix)));
-        self.rebuild_image_data();
+        let (file_paths, prefix) = self.data.settings.get_file_paths_and_prefix();
+        INPUT_QUEUE.push(AppImageAction::Replace(
+            file_paths
+                .iter()
+                .flat_map(|f| f.create_image(&prefix))
+                .collect(),
+        ));
     }
     pub fn get_common_prefix(&self) -> String {
         let file_paths: Vec<String> = self
@@ -127,22 +148,44 @@ impl Application {
         self.update_min_size();
     }
     pub fn update_min_size(&mut self) {
-        self.data.settings.min_size[0] = self
+        self.data.min_size = self
             .data
             .image_data
             .iter()
             .max_by(|a, b| a.width.cmp(&b.width))
-            .map_or(32, |s| s.width);
-        self.data.settings.min_size[1] = self
-            .data
-            .image_data
-            .iter()
-            .max_by(|a, b| a.height.cmp(&b.height))
-            .map_or(32, |s| s.height);
+            .map_or(32, |s| s.width)
+            .max(
+                self.data
+                    .image_data
+                    .iter()
+                    .max_by(|a, b| a.height.cmp(&b.height))
+                    .map_or(32, |s| s.height),
+            );
+        let config: TexturePackerConfig = (&self.data.settings).into();
         for nr in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
-            if nr >= self.data.settings.min_size[0] && nr >= self.data.settings.min_size[1] {
-                self.data.settings.min_size[0] = nr;
-                self.data.settings.min_size[1] = nr;
+            if nr < self.data.min_size {
+                continue;
+            }
+            let mut packer = SkylinePacker::new(TexturePackerConfig {
+                max_width: nr,
+                max_height: nr,
+                ..config
+            });
+            let mut success = true;
+            for image in &self.data.image_data {
+                let data = Rect {
+                    x: 0,
+                    y: 0,
+                    w: image.width,
+                    h: image.height,
+                };
+                if !packer.can_pack(&data) || packer.pack(&data).is_none() {
+                    success = false;
+                    break;
+                }
+            }
+            if success && nr >= self.data.min_size {
+                self.data.min_size = nr;
                 break;
             }
         }
@@ -155,16 +198,19 @@ impl Application {
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
-        let mut app = Self::default();
+        let mut last_editor_paths: Vec<String> = if let Some(storage) = cc.storage {
+            eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        let mut app = Self {
+            last_editor_paths,
+            ..Default::default()
+        };
+        cc.egui_ctx.include_bytes("bytes://image.png", ICON_DATA);
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(config_file) = config_file {
-            use std::path::PathBuf;
             if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(&config_file) {
-                app.data.settings.filename = PathBuf::from(config_file)
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .replace(".rpack_gen.json", "");
                 app.read_config(config);
             }
         }
@@ -174,162 +220,289 @@ impl Application {
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
         self.last_error = None;
-        self.output = None;
         ctx.forget_image("bytes://output.png");
         if self.data.image_data.is_empty() {
+            self.output = SpriteSheetState::Empty;
             return;
         }
-        let images: Vec<&ImageFile> = self.data.image_data.iter().map(|file| &file.data).collect();
-
-        for multiplier in 1..10 {
-            let size = multiplier * self.data.settings.min_size[0];
-            if size > self.data.settings.size {
-                break;
-            }
-            let config = TexturePackerConfig {
-                max_width: size,
-                max_height: size,
-                ..self.data.config
-            };
-            match Spritesheet::build(
-                SpritesheetBuildConfig {
-                    packer_config: config,
-                    skip_metadata_serialization: self.data.settings.skip_metadata_serialization,
-                },
-                &images,
-                format!("{}.png", &self.data.settings.filename),
-            ) {
-                Ok(data) => {
-                    let mut out_vec = vec![];
-                    data.image_data
-                        .write_to(
-                            &mut std::io::Cursor::new(&mut out_vec),
-                            image::ImageFormat::Png,
-                        )
-                        .unwrap();
-                    ctx.include_bytes("bytes://output.png", out_vec);
-
-                    self.output = Some(data);
-                    break;
-                }
-                Err(e) => {
-                    self.last_error = Some(e);
-                }
-            }
+        self.output = SpriteSheetState::Building;
+        let mut packer_config: TexturePackerConfig = (&self.data.settings).into();
+        if packer_config.max_height < self.data.min_size {
+            packer_config.max_height = self.data.min_size;
         }
-        if self.output.is_some() {
-            self.last_error = None;
+        if packer_config.max_width < self.data.min_size {
+            packer_config.max_width = self.data.min_size;
         }
-        ctx.request_repaint();
+        let images: Vec<ImageFile> = self
+            .data
+            .image_data
+            .iter()
+            .map(|file| file.data.clone())
+            .collect();
+        let config = SpritesheetBuildConfig {
+            packer_config,
+            skip_metadata_serialization: self
+                .data
+                .settings
+                .skip_serializing_metadata
+                .unwrap_or_default(),
+        };
+        let path = format!("{}.png", &self.data.settings.output_path);
+        execute(async move {
+            let result = Spritesheet::build(config, &images, &path);
+            INPUT_QUEUE.push(AppImageAction::UpdateSpriteSheet(result));
+        });
     }
 
     fn save_json(&self) -> Result<(), String> {
-        let Some(spritesheet) = &self.output else {
+        let SpriteSheetState::Ok(spritesheet) = &self.output else {
             return Err("Data is incorrect".to_owned());
         };
         let data = spritesheet.atlas_asset_json.to_string();
-        let filename = format!("{}.rpack.json", self.data.settings.filename);
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let path_buf = rfd::FileDialog::new()
+        let filename = format!("{}.rpack.json", self.data.settings.output_path);
+        execute(async move {
+            let file_handle = rfd::AsyncFileDialog::new()
                 .set_directory(".")
                 .add_filter(".rpack.json", &["rpack.json"])
                 .set_file_name(filename)
-                .save_file();
-            if let Some(path) = path_buf {
-                let write_result = std::fs::write(path, &data);
-                if write_result.is_err() {
-                    return Err(format!(
-                        "Could not save json atlas, error: {:?}",
-                        write_result.unwrap_err()
-                    ));
-                }
+                .save_file()
+                .await;
+
+            if let Some(file_handle) = file_handle {
+                let _ = file_handle.write(data.as_bytes()).await;
             }
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            wasm_bindgen_futures::spawn_local(async move {
-                let Some(file) = rfd::AsyncFileDialog::new()
-                    .set_directory(".")
-                    .set_file_name(filename)
-                    .save_file()
-                    .await
-                else {
-                    return;
-                };
-                file.write(data.as_bytes()).await.unwrap();
-            });
-        }
+        });
         Ok(())
     }
 
-    fn save_atlas(&self) -> Result<(), String> {
-        let Some(spritesheet) = &self.output else {
-            return Err("Data is incorrect".to_owned());
-        };
-        let filename = format!("{}.png", self.data.settings.filename);
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let path_buf = rfd::FileDialog::new()
-                .set_directory(".")
-                .add_filter("png", &["png"])
-                .set_file_name(filename)
-                .save_file();
-            if let Some(path) = path_buf {
-                let write_result = spritesheet
-                    .image_data
-                    .save_with_format(path, image::ImageFormat::Png);
-                if write_result.is_err() {
-                    return Err(format!(
-                        "Could not make atlas, error: {:?}",
-                        write_result.unwrap_err()
-                    ));
+    fn read_files(&self) {
+        let common_prefix = self.get_common_prefix();
+        let working_dir = std::path::absolute(common_prefix)
+            .map_or(String::from("."), |p| p.to_string_lossy().to_string());
+        execute(async move {
+            #[cfg(target_arch = "wasm32")]
+            let title = "Open Images";
+            #[cfg(target_arch = "wasm32")]
+            let files = ["png", "jpg", "jpeg", "dds"];
+            #[cfg(not(target_arch = "wasm32"))]
+            let title = "Open Images or config";
+            #[cfg(not(target_arch = "wasm32"))]
+            let files = ["png", "jpg", "jpeg", "dds", "json"];
+            let file_handles = rfd::AsyncFileDialog::new()
+                .set_directory(&working_dir)
+                .set_title(title)
+                .add_filter("Files", &files)
+                .pick_files()
+                .await;
+
+            if let Some(file_handles) = file_handles {
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(file) = file_handles
+                    .iter()
+                    .find(|s| s.file_name().ends_with("rpack_gen.json"))
+                {
+                    if let Ok(config) =
+                        rpack_cli::TilemapGenerationConfig::read_from_file(file.path())
+                    {
+                        INPUT_QUEUE.push(AppImageAction::ReadFromConfig(
+                            config,
+                            file.path().to_path_buf(),
+                        ));
+                    }
+                    return;
+                }
+                for file in file_handles {
+                    let content = file.read().await;
+                    #[cfg(target_arch = "wasm32")]
+                    let name = file.file_name();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let name = file.path().to_string_lossy().to_string();
+                    if let Some(image) = (content, name).create_image("") {
+                        INPUT_QUEUE.push(AppImageAction::Add(image));
+                    }
                 }
             }
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            let mut data = vec![];
-            let Ok(()) = spritesheet.image_data.write_to(
-                &mut std::io::Cursor::new(&mut data),
-                image::ImageFormat::Png,
-            ) else {
-                return Err("Failed to copy data".to_owned());
+        });
+    }
+
+    fn save_atlas(&self) -> Result<(), String> {
+        let SpriteSheetState::Ok(spritesheet) = &self.output else {
+            return Err("Data is incorrect".to_owned());
+        };
+        let filename = format!("{}.png", self.data.settings.output_path);
+        let mut data = vec![];
+        let Ok(()) = spritesheet.image_data.write_to(
+            &mut std::io::Cursor::new(&mut data),
+            image::ImageFormat::Png,
+        ) else {
+            return Err("Failed to copy data".to_owned());
+        };
+        execute(async move {
+            let Some(file) = rfd::AsyncFileDialog::new()
+                .set_directory(".")
+                .set_file_name(filename)
+                .save_file()
+                .await
+            else {
+                return;
             };
-            wasm_bindgen_futures::spawn_local(async move {
-                let Some(file) = rfd::AsyncFileDialog::new()
-                    .set_directory(".")
-                    .set_file_name(filename)
-                    .save_file()
-                    .await
-                else {
-                    return;
-                };
-                file.write(&data).await.unwrap();
-            });
-        }
+            file.write(&data).await.unwrap();
+        });
         Ok(())
     }
 }
 
 impl eframe::App for Application {
+    /// Called by the framework to save state before shutdown.
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, &self.last_editor_paths);
+    }
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.undoer
-            .feed_state(ctx.input(|input| input.time), &self.data);
+        {
+            #[cfg(feature = "profiler")]
+            puffin::profile_scope!("handle_undo");
+            self.undoer
+                .feed_state(ctx.input(|input| input.time), &self.data);
+        }
+        if !INPUT_QUEUE.is_empty() {
+            let mut rebuild = false;
+            #[cfg(feature = "profiler")]
+            puffin::profile_scope!("loading_images");
+
+            #[allow(dead_code)]
+            while let Some(cmd) = INPUT_QUEUE.pop() {
+                match cmd {
+                    AppImageAction::Add(image) => {
+                        rebuild = true;
+                        let mut out_vec = vec![];
+                        image
+                            .data
+                            .image
+                            .thumbnail(64, 64)
+                            .write_to(
+                                &mut std::io::Cursor::new(&mut out_vec),
+                                image::ImageFormat::Png,
+                            )
+                            .unwrap();
+                        ctx.include_bytes(format!("bytes://{}", image.path), out_vec);
+                        self.data.image_data.push(image);
+                    }
+                    AppImageAction::Remove(i) => {
+                        rebuild = true;
+                        self.data.image_data.remove(i);
+                    }
+                    AppImageAction::Clear => {
+                        rebuild = true;
+                        self.data.image_data.clear();
+                    }
+                    AppImageAction::RebuildAtlas => {
+                        rebuild = true;
+                        // Will be called after this loop
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    AppImageAction::ReadFromConfig(config, path) => {
+                        let path_str = path.to_string_lossy().to_string();
+                        if self.last_editor_paths.iter().all(|p| path_str != *p) {
+                            self.last_editor_paths.insert(0, path_str);
+                            if self.last_editor_paths.len() > 3 {
+                                self.last_editor_paths.pop();
+                            }
+                        }
+                        self.read_config(config);
+                    }
+                    AppImageAction::Replace(new_images) => {
+                        rebuild = true;
+                        self.data.image_data.clear();
+                        self.data.image_data.extend(new_images);
+                        for image in &self.data.image_data {
+                            let mut out_vec = vec![];
+                            image
+                                .data
+                                .image
+                                .thumbnail(64, 64)
+                                .write_to(
+                                    &mut std::io::Cursor::new(&mut out_vec),
+                                    image::ImageFormat::Png,
+                                )
+                                .unwrap();
+                            ctx.include_bytes(format!("bytes://{}", image.path), out_vec);
+                        }
+                    }
+                    AppImageAction::UpdateSpriteSheet(result) => match result {
+                        Ok(spritesheet) => {
+                            let mut out_vec = vec![];
+                            spritesheet
+                                .image_data
+                                .write_to(
+                                    &mut std::io::Cursor::new(&mut out_vec),
+                                    image::ImageFormat::Png,
+                                )
+                                .unwrap();
+                            ctx.include_bytes("bytes://output.png", out_vec);
+                            self.output = SpriteSheetState::Ok(spritesheet);
+                        }
+                        Err(e) => {
+                            self.last_error = Some(e);
+                        }
+                    },
+                }
+            }
+            if rebuild {
+                self.rebuild_image_data();
+                self.build_atlas(ctx);
+            }
+        }
         egui::TopBottomPanel::top("topPanel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    let text = egui::RichText::new("rPack")
-                        .font(FontId::new(26.0, FontFamily::Name("semibold".into())))
-                        .color(MY_ACCENT_COLOR32)
-                        .strong();
-                    ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, HEADER_HEIGHT));
-                    ui.add(egui::Label::new(text).selectable(false));
+                #[cfg(feature = "profiler")]
+                puffin::profile_scope!("top_panel");
+                // ui.add_space(TOP_SIDE_MARGIN);
+                ui.with_layout(Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add_space(10.0);
+                    ui.add(
+                        Label::new(
+                            egui::RichText::new("rPack")
+                                .font(FontId::new(26.0, FontFamily::Name("semibold".into())))
+                                .color(MY_ACCENT_COLOR32)
+                                .strong(),
+                        )
+                        .selectable(false),
+                    );
+                    ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(10.0);
+                        if self.output.is_none() {
+                            if ui.add(egui::Button::new("Open")).clicked() {
+                                self.read_files();
+                            }
+                        }
+                        if self.output.is_ok() {
+                            if ui.add(egui::Button::new("Save atlas image")).clicked() {
+                                if let Err(error) = self.save_atlas() {
+                                    eprintln!("ERROR: {}", error);
+                                }
+                            }
+                            if ui.add(egui::Button::new("Save atlas json")).clicked() {
+                                if let Err(error) = self.save_json() {
+                                    eprintln!("ERROR: {}", error);
+                                }
+                            }
+                        }
+                        if ui.available_width() > 15.0 {
+                            ui.add_space(ui.available_width() - 10.0);
+                        }
+                    });
                 });
+                // ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                //     let text = ;
+                //     ui.allocate_space(egui::vec2(TOP_SIDE_MARGIN, HEADER_HEIGHT));
+                //     ui.add(egui::Label::new(text).selectable(false));
+                // });
             });
         ctx.input(|i| {
+            #[cfg(feature = "profiler")]
+            puffin::profile_scope!("dropped_files");
             if i.raw.dropped_files.is_empty() {
                 return;
             }
@@ -342,14 +515,16 @@ impl eframe::App for Application {
                         };
                         for entry in dir {
                             if let Ok(entry) = entry {
-                                let Ok(metadata) = entry.metadata() else {
-                                    continue;
-                                };
-                                if metadata.is_file() {
-                                    let Some(dyn_image) = entry.create_image("") else {
-                                        continue;
-                                    };
-                                    self.data.image_data.push(dyn_image);
+                                if let Some(dyn_image) =
+                                    entry.metadata().ok().and_then(|metadata| {
+                                        if metadata.is_file() {
+                                            entry.create_image("")
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                {
+                                    INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
                                 }
                             }
                         }
@@ -361,28 +536,23 @@ impl eframe::App for Application {
                             if let Ok(config) =
                                 rpack_cli::TilemapGenerationConfig::read_from_file(&path)
                             {
-                                self.data.settings.filename = path
-                                    .file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                                    .replace(".rpack_gen.json", "");
-                                self.read_config(config);
+                                INPUT_QUEUE
+                                    .push(AppImageAction::ReadFromConfig(config, path.clone()));
                                 break;
                             }
                         }
                     }
                 }
-                let Some(dyn_image) = file.create_image("") else {
-                    continue;
-                };
-                self.data.image_data.push(dyn_image);
+                if let Some(dyn_image) = file.create_image("") {
+                    INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
+                }
             }
-            self.output = None;
-            self.rebuild_image_data();
         });
         egui::TopBottomPanel::bottom("bottom_panel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
+                #[cfg(feature = "profiler")]
+                puffin::profile_scope!("bottom_panel");
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
                     ui.add_space(5.0);
@@ -412,214 +582,401 @@ impl eframe::App for Application {
         egui::SidePanel::right("right")
             .min_width(200.0)
             .max_width(400.0)
-            .frame(egui::Frame::canvas(&ctx.style()))
+            .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10))
             .show_animated(ctx, !self.data.image_data.is_empty(), |ui| {
-            egui::ScrollArea::vertical()
-            .id_salt("rightPanel_scroll")
-            .show(ui, |ui| {
-                CollapsingHeader::new("Settings")
-                    .default_open(true)
+                egui::ScrollArea::vertical()
+                    .id_salt("rightPanel_scroll")
                     .show(ui, |ui| {
-                        ui.vertical_centered_justified(|ui|{
-                                let label = ui.label("Tilemap filename");
-                                ui.text_edit_singleline(&mut self.data.settings.filename).labelled_by(label.id);
-                                ui.add_space(10.0);
-                            ui.add(
-                                egui::Slider::new(&mut self.data.settings.size, self.data.settings.min_size[0]..=4096)
-                                .step_by(32.0)
-                                    .text("Max size"),
-                            );
-                            ui.add(
-                                egui::Slider::new(&mut self.data.config.border_padding, 0..=10)
-                                    .text("Border Padding"),
-                            );
-                            ui.add(
-                                egui::Slider::new(&mut self.data.config.texture_padding, 0..=10)
-                                    .text("Texture Padding"),
-                            );
-                            // ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
-                            // .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
-                            ui.checkbox(&mut self.data.config.texture_outlines, "Texture Outlines")
-            .on_hover_text("Draw the red line on the edge of the each frames. Useful for debugging.");
-                            ui.checkbox(&mut self.data.settings.skip_metadata_serialization, "Skip Metadata Serialization")
-            .on_hover_text("Skip metadata serialization.");
-                            // ui.checkbox(&mut self.config.trim, "Trim").on_hover_text("True to trim the empty pixels of the input images.");
-                            ui.add_space(10.0);
-
-                            ui.add_enabled_ui(!self.data.image_data.is_empty(), |ui| {
-                                    if ui
-                                    .add_sized([TOP_BUTTON_WIDTH, 30.0], egui::Button::new("Build atlas"))
-                                    .clicked()
-                                    {
-                                        self.build_atlas(ctx);
-                                    }
-                                    ui.add_space(10.0);
-
-                                });
-                            });
-                    });
-                ui.separator();
-                CollapsingHeader::new("Image list")
-                    .default_open(true)
-                    .show_unindented(ui, |ui| {
-                        ui.horizontal(|ui|{
-
-                            if !self.data.image_data.is_empty() && ui.button("clear list").clicked() {
-                                self.data.image_data.clear();
-                                self.output = None;
-                                self.update_min_size();
-                            }
-                            ui.add_space(10.0);
-                            #[cfg(not(target_arch = "wasm32"))]
-                            if ui.button("Add").clicked() {
-                                if let Some(files) = rfd::FileDialog::new().set_title("Add images").add_filter("Images", &["png", "jpg", "jpeg","dds"]).pick_files(){
-                                    for file in files.iter() {
-                                        let Ok(image) = texture_packer::importer::ImageImporter::import_from_file(file) else { continue };
-                                        let id = crate::helpers::id_from_path(&file.to_string_lossy());
-                                        self.data.image_data.push(AppImageData { width: image.width(), height: image.height(), data: ImageFile { id: id, image }, path: file.to_string_lossy().to_string() });
-                                    }
-                                    self.rebuild_image_data();
-                                }
-                            }
-                        });
-                        let mut to_remove: Option<usize> = None;
-                        let columns = if cfg!(target_arch = "wasm32") {
-                            3
-                        } else {
-                            4
-                        };
-                        Grid::new("Image List").num_columns(columns).striped(true).spacing((10.0,10.0)).show(ui, |ui|{
-
-                            for (index, file) in self.data.image_data.iter().enumerate() {
-                                    if ui.button("x").clicked() {
-                                        to_remove = Some(index);
-                                    }
-                                    #[cfg(not(target_arch = "wasm32"))]
-                                    ui.image(format!("file://{}", file.path.as_str()));
-                                    ui.add(Label::new(format!("{}x{}", file.width, file.height)).selectable(false));
-                                    ui.add(Label::new(file.id()).selectable(false));
-                                    ui.end_row();
-                            }
-                        });
-                        if let Some(index) = to_remove {
-                            self.data.image_data.remove(index);
-                            self.output = None;
-                            self.rebuild_image_data();
-                        }
-                    });
-                });
-            });
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(error) = &self.last_error {
-                let text = egui::RichText::new(format!("Error: {}", &error))
-                    .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
-                    .color(Color32::RED)
-                    .strong();
-                ui.add(egui::Label::new(text));
-            }
-            egui::ScrollArea::vertical()
-                .id_salt("vertical_scroll")
-                .show(ui, |ui| {
-                    if self.data.image_data.is_empty() {
-                        ui.vertical_centered_justified(|ui| {
-                            ui.add_space(50.0);
-                            ui.add(
-                                Label::new(
-                                    RichText::new("Drop images here first")
-                                        .heading()
-                                        .color(MY_ACCENT_COLOR32),
-                                )
-                                .selectable(false),
-                            );
-                        });
-                    }
-                    let Some(data) = &self.output else {
-                        return;
-                    };
-                    ui.vertical_centered_justified(|ui| {
-                        egui::Frame::canvas(&ctx.style()).show(ui, |ui| {
-                            ui.add_space(10.0);
-                            ui.heading(
-                                egui::RichText::new("Created atlas").color(MY_ACCENT_COLOR32),
-                            );
-                            ui.add_space(10.0);
-                            ui.label(format!(
-                                "{} sprites\nsize: {}x{}",
-                                data.atlas_asset.frames.len(),
-                                data.atlas_asset.size[0],
-                                data.atlas_asset.size[1]
-                            ));
-                            ui.add_space(10.0);
-                            ui.horizontal_wrapped(|ui| {
-                                let width = (ui.available_width() - 30.0).max(1.0) / 2.0;
-                                ui.add_space(10.0);
-                                if ui
-                                    .add_sized([width, 35.0], egui::Button::new("Save atlas image"))
-                                    .clicked()
-                                {
-                                    if let Err(error) = self.save_atlas() {
-                                        eprintln!("ERROR: {}", error);
-                                    }
-                                }
-                                ui.add_space(10.0);
-                                if ui
-                                    .add_sized([width, 35.0], egui::Button::new("Save atlas json"))
-                                    .clicked()
-                                {
-                                    if let Err(error) = self.save_json() {
-                                        eprintln!("ERROR: {}", error);
-                                    }
-                                }
-                                ui.add_space(10.0);
-                            });
-                            ui.add_space(10.0);
-                            CollapsingHeader::new("Atlas JSON")
-                                .default_open(true)
+                        ui.add_enabled_ui(!self.output.is_building(), |ui| {
+                            #[cfg(feature = "profiler")]
+                            puffin::profile_scope!("right_panel");
+                            let mut changed = false;
+                            Grid::new("settings_grid")
+                                .num_columns(2)
+                                .spacing((10.0, 10.0))
+                                .striped(true)
                                 .show(ui, |ui| {
-                                    ui.vertical_centered_justified(|ui| {
-                                        ui.add_space(10.0);
-                                        egui_json_tree::JsonTree::new(
-                                            "simple-tree",
-                                            &data.atlas_asset_json,
-                                        )
-                                        .show(ui);
-                                        #[cfg(not(target_arch = "wasm32"))]
-                                        {
-                                            ui.add_space(10.0);
+                                    ui.style_mut().visuals.faint_bg_color =
+                                        Color32::from_white_alpha(15);
+                                    ui.style_mut().interaction.selectable_labels = false;
+                                    let id = ui.label("File Name").id;
+                                    changed |= ui
+                                        .text_edit_singleline(&mut self.data.settings.output_path)
+                                        .labelled_by(id)
+                                        .changed();
+                                    ui.end_row();
+                                    ui.label("Output size");
+                                    let selected_size = match self.data.settings.size {
+                                        Some(size) => {
+                                            format!("{}x{}", size, size)
+                                        }
+                                        None => String::from("2048x2048"),
+                                    };
+                                    changed |= MenuButton::from_button(
+                                        Button::new(selected_size).frame_when_inactive(false),
+                                    )
+                                    .ui(ui, |ui| {
+                                        for size in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
+                                            let same_size =
+                                                self.data.settings.size.is_some_and(|s| s == size);
                                             if ui
-                                                .add(egui::Button::new("Copy JSON to Clipboard"))
+                                                .add_enabled(
+                                                    size >= self.data.min_size,
+                                                    Button::new(format!("{}x{}", size, size))
+                                                        .selected(same_size),
+                                                )
                                                 .clicked()
                                             {
-                                                ui.ctx()
-                                                    .copy_text(data.atlas_asset_json.to_string());
-                                            };
+                                                self.data.settings.size =
+                                                    if same_size { None } else { Some(size) };
+                                                return true;
+                                            }
                                         }
-                                    });
+                                        false
+                                    })
+                                    .1
+                                    .map_or(false, |s| s.inner);
+                                    ui.end_row();
+                                    changed |= slider_field(
+                                        ui,
+                                        "Border Padding",
+                                        &mut self.data.settings.border_padding,
+                                        0,
+                                        0..=10,
+                                    );
+                                    ui.end_row();
+                                    changed |= slider_field(
+                                        ui,
+                                        "Texture Padding",
+                                        &mut self.data.settings.texture_padding,
+                                        2,
+                                        0..=10,
+                                    );
+                                    ui.end_row();
+                                    let mut serialize_metadata = self
+                                        .data
+                                        .settings
+                                        .skip_serializing_metadata
+                                        .unwrap_or_default();
+                                    ui.label("Skip Metadata Serialization");
+                                    if ui.checkbox(&mut serialize_metadata, "").changed() {
+                                        self.data.settings.skip_serializing_metadata =
+                                            Some(serialize_metadata);
+                                    }
                                 });
+                            ui.vertical_centered_justified(|ui| {
+                                ui.add_space(10.0);
+
+                                // changed |= ui.checkbox(&mut
+                                //     self.data.settings., "Force Max Dimensions").changed();
+                                // ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
+                                // .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
+                                // ui.checkbox(&mut self.data.config.texture_outlines, "Texture Outlines")
+                                // .on_hover_text("Draw the red line on the edge of the each frames. Useful for debugging.");
+
+                                ui.add_space(10.0);
+                            });
+                            if changed {
+                                INPUT_QUEUE.push(AppImageAction::RebuildAtlas);
+                            }
+                            ui.separator();
+                            {
+                                ui.style_mut().interaction.selectable_labels = false;
+                                #[cfg(feature = "profiler")]
+                                puffin::profile_scope!("image_list");
+
+                                ui.horizontal(|ui| {
+                                    ui.heading("Images");
+                                    ui.with_layout(
+                                        Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if !self.data.image_data.is_empty()
+                                                && ui
+                                                    .add(egui::Button::new("🗙").frame(false))
+                                                    .on_hover_text("Remove all images")
+                                                    .clicked()
+                                            {
+                                                INPUT_QUEUE.push(AppImageAction::Clear);
+                                            }
+                                            ui.add_space(10.0);
+
+                                            if ui
+                                                .add(egui::Button::new("⊞").frame(false))
+                                                .on_hover_text("Add more images")
+                                                .clicked()
+                                            {
+                                                self.read_files();
+                                            }
+                                            if ui.available_width() > 15.0 {
+                                                ui.add_space(ui.available_width() - 10.0);
+                                            }
+                                        },
+                                    )
+                                });
+                                let length = self.data.image_data.len();
+                                let text_height =
+                                    egui::TextStyle::Body.resolve(ui.style()).size * 1.5;
+
+                                let table = TableBuilder::new(ui)
+                                    .striped(true)
+                                    .vscroll(true)
+                                    .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                                    .column(Column::remainder().at_least(50.0))
+                                    .column(Column::exact(70.0))
+                                    .column(Column::auto().at_most(150.0).at_least(30.0))
+                                    .column(Column::auto())
+                                    .sense(egui::Sense::click());
+                                table
+                                    .header(text_height, |mut row| {
+                                        row.col(|col| {
+                                            col.vertical_centered_justified(|ui| {
+                                                ui.add(
+                                                    egui::Label::new("Name")
+                                                        .wrap_mode(egui::TextWrapMode::Truncate)
+                                                        .selectable(false), // .sense(Sense::click()),
+                                                )
+                                            });
+                                        });
+                                        row.col(|col| {
+                                            col.vertical_centered_justified(|ui| {
+                                                ui.add(
+                                                    egui::Label::new("Preview")
+                                                        .wrap_mode(egui::TextWrapMode::Truncate)
+                                                        .selectable(false),
+                                                )
+                                            });
+                                        });
+                                        row.col(|col| {
+                                            col.vertical_centered_justified(|ui| {
+                                                ui.add(
+                                                    egui::Label::new("Dimensions")
+                                                        .wrap_mode(egui::TextWrapMode::Truncate)
+                                                        .selectable(false)
+                                                        .sense(Sense::click()),
+                                                )
+                                            });
+                                        });
+
+                                        row.col(|col| {
+                                            col.vertical_centered_justified(|ui| {
+                                                ui.add(
+                                                    egui::Label::new("")
+                                                        .wrap_mode(egui::TextWrapMode::Truncate)
+                                                        .selectable(false),
+                                                )
+                                            });
+                                        });
+                                    })
+                                    .body(|body| {
+                                        body.rows(64.0, length, |mut row| {
+                                            let index = row.index();
+                                            let file = &self.data.image_data[index];
+                                            row.col(|ui| {
+                                                ui.add(
+                                                    Label::new(file.id())
+                                                        .selectable(false)
+                                                        .wrap_mode(egui::TextWrapMode::Truncate),
+                                                );
+                                            });
+                                            row.col(|ui| {
+                                                ui.vertical_centered_justified(|ui| {
+                                                    ui.add_sized(
+                                                        (64.0, 64.0),
+                                                        Image::from_uri(format!(
+                                                            "bytes://{}",
+                                                            file.path.as_str()
+                                                        ))
+                                                        .corner_radius(5u8),
+                                                    );
+                                                });
+                                            });
+                                            row.col(|ui| {
+                                                ui.add(
+                                                    Label::new(format!(
+                                                        "{}x{}",
+                                                        file.width, file.height
+                                                    ))
+                                                    .selectable(false),
+                                                );
+                                            });
+                                            row.col(|ui| {
+                                                if ui
+                                                    .add(Button::new("🗙").frame(false))
+                                                    .on_hover_text("Remove")
+                                                    .clicked()
+                                                {
+                                                    INPUT_QUEUE.push(AppImageAction::Remove(index));
+                                                }
+                                            });
+                                        });
+                                    });
+                            }
+                        });
+                    });
+            });
+        egui::CentralPanel::default()
+            .frame(Frame::central_panel(&ctx.style()).inner_margin(16i8))
+            .show(ctx, |ui| {
+                #[cfg(feature = "profiler")]
+                puffin::profile_scope!("central_panel");
+                if let Some(error) = &self.last_error {
+                    let text = egui::RichText::new(format!("Error: {}", &error))
+                        .font(FontId::new(20.0, FontFamily::Name("semibold".into())))
+                        .color(Color32::RED)
+                        .strong();
+                    ui.add(egui::Label::new(text));
+                }
+                egui::ScrollArea::vertical()
+                    .id_salt("vertical_scroll")
+                    .show(ui, |ui| {
+                        ui.vertical_centered_justified(|ui| {
+                            if self.data.image_data.is_empty() {
+                                ui.add_space(25.0);
+                                Grid::new("Header").num_columns(2).show(ui, |ui|{
+                                   ui.add_sized(
+                                       (256.0,256.0),Image::new("bytes://image.png"));
+                                   ui.vertical_centered_justified(|ui|{
+                                       ui.add_space(15.0);
+                                       ui.add(
+                                           Label::new(
+                                               RichText::new("Create spritesheets in seconds!")
+                                                   .heading()
+                                                   // .color(MY_ACCENT_COLOR32),
+                                           )
+                                           .selectable(false),
+                                       );
+                                       ui.separator();
+                                       ui.add_space(10.0);
+                                       ui.add(
+                                           Label::new(
+                                               RichText::new("Drag and drop images here to start creating new spritesheets.")
+                                           )
+                                           .selectable(false),
+                                       );
+                                   });
+                                });
+                                ui.add_space(10.0);
+                                // if ui.button("Open files").clicked() {
+                                //     self.read_files();
+                                // }
+                                #[cfg(not(target_arch = "wasm32"))]
+                                {
+                                    if !self.last_editor_paths.is_empty() {
+                                        ui.separator();
+                                        ui.add(
+                                            Label::new(RichText::new("Recent projects").heading())
+                                                .selectable(false),
+                                        );
+                                    }
+                                    ui.add_space(10.0);
+                                    for p in &self.last_editor_paths {
+                                        if ui.add(Button::new(p).frame(false)).clicked() {
+                                            if let Ok(config) =
+                                                rpack_cli::TilemapGenerationConfig::read_from_file(
+                                                    p,
+                                                )
+                                            {
+                                                use std::str::FromStr;
+
+                                                INPUT_QUEUE.push(AppImageAction::ReadFromConfig(
+                                                    config,
+                                                    PathBuf::from_str(p).unwrap_or_default(),
+                                                ));
+                                            }
+                                        }
+                                        ui.add_space(10.0);
+                                    }
+                                }
+                            }
+                            if self.output.is_building(){
+                                ui.heading(
+                                    egui::RichText::new("Building atlas...").color(MY_ACCENT_COLOR32),
+                                );
+                                ui.add_space(10.0);
+                                ui.spinner();
+                            }
+                            let SpriteSheetState::Ok(data) = &self.output else {
+                                return;
+                            };
+                            // ui.add_space(10.0);
+                            // ui.heading(
+                            //     egui::RichText::new("Created atlas").color(MY_ACCENT_COLOR32),
+                            // );
+                            ui.add_space(10.0);
+                            ui.horizontal(|ui|{
+                                ui.label(format!(
+                                    "{} sprites\nsize: {}x{}",
+                                    data.atlas_asset.frames.len(),
+                                    data.atlas_asset.size[0],
+                                    data.atlas_asset.size[1]
+                                ));
+                                ui.separator();
+                                ui.vertical_centered_justified(|ui|{
+
+                                    ui.add_space(10.0);
+                                    if ui
+                                        .add(egui::Button::new("Copy JSON to Clipboard"))
+                                        .clicked()
+                                    {
+                                        ui.ctx()
+                                            .copy_text(data.atlas_asset_json.to_string());
+                                    };
+                                    ui.add_space(10.0);
+                                    egui_json_tree::JsonTree::new(
+                                        "simple-tree",
+                                        &data.atlas_asset_json,
+                                    )
+                                    .show(ui);
+                                });
+
+                            });
+
                             ui.add_space(10.0);
                             ui.separator();
-                            ui.add(Image::from_uri("bytes://output.png"));
+                            ui.add(Image::from_uri("bytes://output.png").bg_fill(Color32::from_black_alpha(200)));
                             ui.separator();
                             ui.add_space(20.0);
                         });
                     });
-                });
-        });
+            });
     }
 }
 
 fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
     ui.with_layout(Layout::right_to_left(egui::Align::Min), |ui| {
         ui.add_space(10.0);
-        ui.hyperlink_to(format!("Build: {}", GIT_HASH), env!("CARGO_PKG_HOMEPAGE"));
-        egui::warn_if_debug_build(ui);
+        if ui
+            .add(egui::Button::new(VERSION).frame(false))
+            .on_hover_text(GIT_HASH)
+            .clicked()
+        {
+            ui.ctx()
+                .open_url(egui::OpenUrl::new_tab(env!("CARGO_PKG_HOMEPAGE")));
+        }
         ui.separator();
         egui::widgets::global_theme_preference_switch(ui);
         ui.separator();
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.hyperlink_to("Mev Lyshkin", "https://www.mevlyshkin.com/");
         ui.add_space(10.0);
-        ui.label("Made by ");
+        ui.label("Made by");
         ui.add_space((ui.available_width() - 10.0).max(15.0));
     });
+}
+
+fn slider_field(
+    ui: &mut Ui,
+    label: &str,
+    field: &mut Option<u32>,
+    default_value: u32,
+    range: RangeInclusive<u32>,
+) -> bool {
+    ui.label(label);
+    let mut value = field.unwrap_or(default_value);
+    if ui.add(Slider::new(&mut value, range)).changed() {
+        *field = Some(value);
+        true
+    } else {
+        false
+    }
 }

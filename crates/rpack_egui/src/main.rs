@@ -1,10 +1,37 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
+fn start_puffin_server() {
+    puffin::set_scopes_on(true); // tell puffin to collect data
+
+    match puffin_http::Server::new("127.0.0.1:8585") {
+        Ok(puffin_server) => {
+            log::info!("Run:  cargo install puffin_viewer && puffin_viewer --url 127.0.0.1:8585");
+
+            std::process::Command::new("puffin_viewer")
+                .arg("--url")
+                .arg("127.0.0.1:8585")
+                .spawn()
+                .ok();
+
+            // We can store the server if we want, but in this case we just want
+            // it to keep running. Dropping it closes the server, so let's not drop it!
+            #[expect(clippy::mem_forget)]
+            std::mem::forget(puffin_server);
+        }
+        Err(err) => {
+            log::error!("Failed to start puffin server: {err}");
+        }
+    }
+}
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    #[cfg(feature = "profiler")]
+    start_puffin_server();
     let file_arg: Option<String> = if std::env::args().len() > 1 {
         std::env::args().skip(1).next()
     } else {
@@ -13,10 +40,7 @@ fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([400.0, 300.0])
-            .with_icon(
-                eframe::icon_data::from_png_bytes(include_bytes!("../static/base_icon.png"))
-                    .unwrap_or_default(),
-            )
+            .with_icon(eframe::icon_data::from_png_bytes(rpack_egui::ICON_DATA).unwrap_or_default())
             .with_min_inner_size([400.0, 300.0]),
         ..Default::default()
     };

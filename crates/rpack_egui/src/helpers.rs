@@ -42,6 +42,16 @@ impl DroppedFileHelper for std::fs::DirEntry {
         ImageImporter::import_from_file(&self.path()).ok()
     }
 }
+
+impl DroppedFileHelper for (Vec<u8>, String) {
+    fn file_path(&self) -> String {
+        self.1.clone()
+    }
+
+    fn dynamic_image(&self) -> Option<DynamicImage> {
+        ImageImporter::import_from_memory(&self.0).ok()
+    }
+}
 #[cfg(not(target_arch = "wasm32"))]
 impl DroppedFileHelper for PathBuf {
     fn file_path(&self) -> String {
@@ -70,19 +80,10 @@ impl DroppedFileHelper for DroppedFile {
     }
 
     fn dynamic_image(&self) -> Option<DynamicImage> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let bytes = self.bytes.as_ref().clone()?;
+        let bytes = self.bytes.as_ref().clone()?;
 
-            ImageImporter::import_from_memory(bytes)
-                .ok()
-                .map(|r| r.into())
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let path = self.path.as_ref()?;
-
-            ImageImporter::import_from_file(path).ok()
-        }
+        ImageImporter::import_from_memory(bytes)
+            .ok()
+            .map(|r| r.into())
     }
 }

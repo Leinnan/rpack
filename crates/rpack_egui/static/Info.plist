@@ -22,7 +22,7 @@
             <string>Rpack gen config</string>
             <key>CFBundleTypeExtensions</key>
             <array>
-                <string>rpack_gen.json</string>
+                <string>json</string>
             </array>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>

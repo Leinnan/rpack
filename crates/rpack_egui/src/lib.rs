@@ -4,3 +4,4 @@ mod app;
 mod fonts;
 mod helpers;
 pub use app::Application;
+pub use app::ICON_DATA;

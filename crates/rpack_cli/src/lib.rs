@@ -12,6 +12,8 @@ use std::{
 use texture_packer::{TexturePacker, TexturePackerConfig, importer::ImageImporter};
 use thiserror::Error;
 
+pub mod packer;
+
 #[derive(Clone)]
 pub struct Spritesheet {
     pub image_data: DynamicImage,
@@ -79,7 +81,7 @@ where
     prefix
 }
 
-#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(
     all(feature = "cli", not(target_arch = "wasm32")),
     derive(clap::ValueEnum)
@@ -105,14 +107,14 @@ impl Display for SaveImageFormat {
 
 /// Errors that can occur while building a `Spritesheet`.
 #[non_exhaustive]
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum SpritesheetError {
     #[error("Cannot pack image: {0}")]
     CannotPackImage(String),
     #[error("Failed to export tilemap image")]
     FailedToExportImage,
     #[error("could not parse asset: {0}")]
-    ParsingError(#[from] serde_json::Error),
+    ParsingError(String),
     #[error("Failed to pack image into tilemap, tilemap to small")]
     FailedToPackImage,
 }
@@ -138,7 +140,7 @@ impl From<TexturePackerConfig> for SpritesheetBuildConfig {
 impl Spritesheet {
     pub fn build<P>(
         config: impl Into<SpritesheetBuildConfig>,
-        images: &[&ImageFile],
+        images: &[ImageFile],
         filename: P,
     ) -> Result<Self, SpritesheetError>
     where
@@ -185,7 +187,8 @@ impl Spritesheet {
                 .collect(),
         };
         atlas_asset.frames.sort_by(|a, b| a.key.cmp(&b.key));
-        let atlas_asset_json = serde_json::to_value(&atlas_asset)?;
+        let atlas_asset_json = serde_json::to_value(&atlas_asset)
+            .map_err(|e| SpritesheetError::ParsingError(e.to_string()))?;
 
         Ok(Spritesheet {
             image_data,
@@ -266,7 +269,7 @@ impl Spritesheet {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct TilemapGenerationConfig {
     pub asset_patterns: Vec<String>,
     pub output_path: String,
@@ -372,7 +375,6 @@ impl TilemapGenerationConfig {
                 ImageFile::at_path(f, id)
             })
             .collect();
-        let borrowed_images: Vec<&ImageFile> = images.iter().map(|s| s).collect();
         let atlas_image_path = working_dir.join(format!(
             "{}{}",
             self.output_path,
@@ -384,7 +386,7 @@ impl TilemapGenerationConfig {
             .to_string_lossy()
             .to_string();
         let atlas_config_path = working_dir.join(format!("{}.rpack.json", self.output_path));
-        let spritesheet = Spritesheet::build(self, &borrowed_images, &atlas_filename)?;
+        let spritesheet = Spritesheet::build(self, &images, &atlas_filename)?;
 
         if Path::new(&atlas_config_path).exists() {
             std::fs::remove_file(&atlas_config_path).expect("Could not remove the old file");
