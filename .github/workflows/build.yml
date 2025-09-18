@@ -33,25 +33,39 @@ jobs:
         if: startsWith(runner.os, 'macos')
         working-directory: crates/rpack_egui
         run: just create_mac_installer
+      - name: Mac artifacts
+        if: startsWith(runner.os, 'macos')
+        run: |
+          mkdir artifacts
+          mv crates/rpack_egui/RpackInstaller.pkg artifacts/RpackInstaller.pkg
       - name: Regular installer
         if: ${{ !startsWith(runner.os, 'macos') }}
         working-directory: crates/rpack_egui
         run: |
           just create_installer
-          mkdir ../../artifacts
-          cp RpackInstaller.pkg ../../artifacts/RpackInstaller.pkg
+      - name: Copy artifacts
+        if: ${{ startsWith(runner.os, 'windows') }}
+        run: |
+          mkdir artifacts
+          cp target/release/rpack_egui.exe artifacts/rpack_egui.exe
+      - name: Copy artifacts
+        if: ${{ startsWith(runner.os, 'ubuntu') }}
+        run: |
+          mkdir artifacts
+          cp target/release/bundle/deb/rpack_egui*.deb artifacts/
+          cp target/release/bundle/appimage/rpack_egui*.AppImage artifacts/
       - uses: actions/upload-artifact@v4
         if: startsWith(runner.os, 'macos')
         with:
           name: macos-installer
           path: artifacts
       - name: Copy artifacts
-        if: ${{ startsWith(runner.os, 'windows') }}
+        if: ${{ startsWith(runner.os, 'ubuntu') }}
         run: |
           mkdir artifacts
-          cp target/release/rpack_egui.exe artifacts/rpack_egui.exe
+          cp target/release/rpack_egui artifacts/rpack_egui
       - uses: actions/upload-artifact@v4
-        if: startsWith(runner.os, 'windows')
+        if: ${{ !startsWith(runner.os, 'macos') }}
         with:
-          name: windows-exe
+          name: ${{ runner.os }}
           path: artifacts
