@@ -459,12 +459,16 @@ impl eframe::App for Application {
                 #[cfg(feature = "profiler")]
                 puffin::profile_scope!("top_panel");
                 // ui.add_space(TOP_SIDE_MARGIN);
+                #[cfg(not(target_arch = "wasm32"))]
+                let title_font = FontId::new(26.0, FontFamily::Name("semibold".into()));
+                #[cfg(target_arch = "wasm32")]
+                let title_font = FontId::new(26.0, FontFamily::Proportional);
                 ui.with_layout(Layout::left_to_right(egui::Align::Center), |ui| {
                     ui.add_space(10.0);
                     ui.add(
                         Label::new(
                             egui::RichText::new("rPack")
-                                .font(FontId::new(26.0, FontFamily::Name("semibold".into())))
+                                .font(title_font)
                                 .color(MY_ACCENT_COLOR32)
                                 .strong(),
                         )
