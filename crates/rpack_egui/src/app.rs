@@ -1,15 +1,15 @@
 use crossbeam::queue::SegQueue;
-use egui::Grid;
 use egui::containers::menu::MenuButton;
+use egui::Grid;
 use egui::{
-    Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout, RichText, Sense, Slider, Ui,
-    util::undoer::Undoer,
+    util::undoer::Undoer, Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout,
+    RichText, Sense, Slider, Ui,
 };
 use egui_extras::{Column, TableBuilder};
 use once_cell::sync::Lazy;
 use rpack_cli::TilemapGenerationConfig;
 use rpack_cli::{
-    ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError, packer::SkylinePacker,
+    packer::SkylinePacker, ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError,
 };
 use texture_packer::{Rect, TexturePackerConfig};
 
