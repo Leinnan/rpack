@@ -37,7 +37,8 @@ jobs:
           restore-keys: ${{ inputs.runningSystem }}-build-
       - uses: extractions/setup-just@v2
       - name: Install Cargo Bundle
-        run: cargo install --git https://github.com/Leinnan/cargo-bundler
+        continue-on-error: true
+        run: cargo install --git https://github.com/Leinnan/cargo-bundler && true
       - name: Bundle
         working-directory: crates/rpack_egui
         run: |
