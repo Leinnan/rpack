@@ -30,7 +30,7 @@ fn start_puffin_server() {
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
-    #[cfg(feature = "profiler")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
     start_puffin_server();
     let file_arg: Option<String> = if std::env::args().len() > 1 {
         std::env::args().skip(1).next()

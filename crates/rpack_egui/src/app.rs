@@ -360,14 +360,14 @@ impl eframe::App for Application {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         {
-            #[cfg(feature = "profiler")]
+            #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
             puffin::profile_scope!("handle_undo");
             self.undoer
                 .feed_state(ctx.input(|input| input.time), &self.data);
         }
         if !INPUT_QUEUE.is_empty() {
             let mut rebuild = false;
-            #[cfg(feature = "profiler")]
+            #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
             puffin::profile_scope!("loading_images");
 
             #[allow(dead_code)]
@@ -456,7 +456,7 @@ impl eframe::App for Application {
         egui::TopBottomPanel::top("topPanel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
-                #[cfg(feature = "profiler")]
+                #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("top_panel");
                 // ui.add_space(TOP_SIDE_MARGIN);
                 #[cfg(not(target_arch = "wasm32"))]
@@ -505,7 +505,7 @@ impl eframe::App for Application {
                 // });
             });
         ctx.input(|i| {
-            #[cfg(feature = "profiler")]
+            #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
             puffin::profile_scope!("dropped_files");
             if i.raw.dropped_files.is_empty() {
                 return;
@@ -555,7 +555,7 @@ impl eframe::App for Application {
         egui::TopBottomPanel::bottom("bottom_panel")
             .frame(egui::Frame::canvas(&ctx.style()))
             .show(ctx, |ui| {
-                #[cfg(feature = "profiler")]
+                #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("bottom_panel");
                 ui.add_space(5.0);
                 ui.horizontal(|ui| {
@@ -592,7 +592,7 @@ impl eframe::App for Application {
                     .id_salt("rightPanel_scroll")
                     .show(ui, |ui| {
                         ui.add_enabled_ui(!self.output.is_building(), |ui| {
-                            #[cfg(feature = "profiler")]
+                            #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                             puffin::profile_scope!("right_panel");
                             let mut changed = false;
                             Grid::new("settings_grid")
@@ -686,7 +686,7 @@ impl eframe::App for Application {
                             ui.separator();
                             {
                                 ui.style_mut().interaction.selectable_labels = false;
-                                #[cfg(feature = "profiler")]
+                                #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                                 puffin::profile_scope!("image_list");
 
                                 ui.horizontal(|ui| {
@@ -821,7 +821,7 @@ impl eframe::App for Application {
         egui::CentralPanel::default()
             .frame(Frame::central_panel(&ctx.style()).inner_margin(16i8))
             .show(ctx, |ui| {
-                #[cfg(feature = "profiler")]
+                #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("central_panel");
                 if let Some(error) = &self.last_error {
                     let text = egui::RichText::new(format!("Error: {}", &error))

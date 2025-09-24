@@ -1,0 +1,49 @@
+name: Bundle
+
+on:
+  workflow_call:
+    inputs:
+      runningSystem:
+        description: "System to run the job on"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      runningSystem:
+        type: choice
+        description: "System to run the job on"
+        required: true
+        options:
+          - ubuntu-latest
+          - windows-latest
+          - macos-15
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runningSystem }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache@v4
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cache/sccache
+            target/
+          key: ${{ inputs.runningSystem }}-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ inputs.runningSystem }}-build-
+      - uses: extractions/setup-just@v2
+      - name: Install Cargo Bundle
+        run: cargo install --git https://github.com/Leinnan/cargo-bundler
+      - name: Bundle mac
+        if: inputs.bundle == true && startsWith(inputs.runningSystem, 'macos')
+        working-directory: crates/rpack_egui
+        run: |
+          just bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.runningSystem }}
+          path: target/release/bundle

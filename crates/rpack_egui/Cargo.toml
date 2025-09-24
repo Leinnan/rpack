@@ -58,7 +58,8 @@ js-sys = "0.3"
 
 [package.metadata.bundle]
 name = "Rpack"
-resources = ["static/resources/*"]
+icon = ["static/base_icon.png"]
+resources_mapping = [["static/JetBrains*","./"]]
 identifier = "io.github.leinnan.rpack"
 osx_url_schemes = ["io.github.leinnan.rpack"]
 short_description = "Tilemap Editor"

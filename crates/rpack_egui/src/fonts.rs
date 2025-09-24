@@ -1,3 +1,5 @@
+use std::path::Path;
+
 pub fn setup_custom_fonts(ctx: &egui::Context) {
     // Start with the default fonts (we will be adding to them rather than replacing them).
     let mut fonts = egui::FontDefinitions::default();
@@ -41,26 +43,95 @@ pub fn setup_custom_fonts(ctx: &egui::Context) {
     });
 }
 
-#[cfg(not(windows))]
+#[cfg(target_arch = "wasm32")]
 fn get_fonts() -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
-    use std::fs;
-
-    let font_path = std::path::Path::new("/System/Library/Fonts");
-
-    let regular = fs::read(font_path.join("SFNSRounded.ttf"))?;
-    let semibold = fs::read(font_path.join("SFCompact.ttf"))?;
+    let regular = include_bytes!("../static/JetBrainsMonoNL-Regular.ttf").to_vec();
+    let semibold = include_bytes!("../static/JetBrainsMono-SemiBold.ttf").to_vec();
 
     Ok((regular, semibold))
 }
 
-#[cfg(windows)]
+#[cfg(not(target_arch = "wasm32"))]
 fn get_fonts() -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
-    use std::fs;
-    let app_data = std::env::var("APPDATA")?;
-    let font_path = std::path::Path::new(&app_data);
-
-    let regular = fs::read(font_path.join("../Local/Microsoft/Windows/Fonts/aptos.ttf"))?;
-    let semibold = fs::read(font_path.join("../Local/Microsoft/Windows/Fonts/aptos-semibold.ttf"))?;
+    let Some(regular) =
+        try_get_font_from_list(&["JetBrainsMonoNL-Regular", "SFNSRounded", "aptos"])
+    else {
+        anyhow::bail!("Failed to find a suitable font");
+    };
+    let Some(semibold) =
+        try_get_font_from_list(&["JetBrainsMono-SemiBold", "SFNSRounded", "aptos-semibold"])
+    else {
+        anyhow::bail!("Failed to find a suitable font");
+    };
 
     Ok((regular, semibold))
+}
+
+fn try_get_font_from_list(font_names: &[&str]) -> Option<Vec<u8>> {
+    for font_name in font_names {
+        if let Some(font) = try_get_font(font_name) {
+            return Some(font);
+        }
+    }
+    None
+}
+
+fn try_get_font(font_name: &str) -> Option<Vec<u8>> {
+    for dir in font_dirs() {
+        if let Ok(font) = std::fs::read(Path::new(&dir).join(format!("{}.ttf", font_name))) {
+            return Some(font);
+        }
+        if let Ok(font) = std::fs::read(Path::new(&dir).join(format!("{}.otf", font_name))) {
+            return Some(font);
+        }
+    }
+    None
+}
+
+fn font_dirs() -> Vec<String> {
+    let mut dirs = Vec::new();
+
+    #[cfg(target_os = "linux")]
+    {
+        dirs.push("/usr/share/fonts".into());
+        dirs.push("/usr/share/fonts/truetype".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::{path::PathBuf, str::FromStr};
+
+        #[cfg(target_os = "macos")]
+        {
+            dirs.push("/System/Library/Fonts".into());
+            if let Some(resources_font_dir) = std::env::current_exe().ok().and_then(|p| {
+                p.ancestors()
+                    .nth(2)
+                    .map(|p| p.join("Resources/fonts").to_string_lossy().into_owned())
+            }) {
+                eprintln!("{}", &resources_font_dir);
+                dirs.push(resources_font_dir);
+            }
+        }
+        if let Some(home) =
+            std::env::var_os("HOME").and_then(|s| PathBuf::from_str(&s.to_string_lossy()).ok())
+        {
+            #[cfg(target_os = "macos")]
+            {
+                dirs.push(format!("{}/Library/Fonts", home.display()));
+            }
+            #[cfg(target_os = "linux")]
+            {
+                dirs.push(format!("{}/.local/share/fonts", home.display()));
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(dir) = std::env::var("APPDATA") {
+            let font_path = std::path::Path::new(&dir).join("../Local/Microsoft/Windows/Fonts/");
+            dirs.push(font_path.display().to_string());
+        }
+    }
+
+    dirs
 }
