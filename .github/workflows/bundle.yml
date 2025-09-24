@@ -38,8 +38,7 @@ jobs:
       - uses: extractions/setup-just@v2
       - name: Install Cargo Bundle
         run: cargo install --git https://github.com/Leinnan/cargo-bundler
-      - name: Bundle mac
-        if: inputs.bundle == true && startsWith(inputs.runningSystem, 'macos')
+      - name: Bundle
         working-directory: crates/rpack_egui
         run: |
           just bundle
