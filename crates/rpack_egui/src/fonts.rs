@@ -67,6 +67,7 @@ fn get_fonts() -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
     Ok((regular, semibold))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn try_get_font_from_list(font_names: &[&str]) -> Option<Vec<u8>> {
     for font_name in font_names {
         if let Some(font) = try_get_font(font_name) {
@@ -76,6 +77,7 @@ fn try_get_font_from_list(font_names: &[&str]) -> Option<Vec<u8>> {
     None
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn try_get_font(font_name: &str) -> Option<Vec<u8>> {
     for dir in font_dirs() {
         if let Ok(font) = std::fs::read(Path::new(&dir).join(format!("{}.ttf", font_name))) {
@@ -88,6 +90,7 @@ fn try_get_font(font_name: &str) -> Option<Vec<u8>> {
     None
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn font_dirs() -> Vec<String> {
     let mut dirs = Vec::new();
 
