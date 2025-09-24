@@ -33,7 +33,7 @@ fn main() -> eframe::Result<()> {
     #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
     start_puffin_server();
     let file_arg: Option<String> = if std::env::args().len() > 1 {
-        std::env::args().skip(1).next()
+        std::env::args().nth(1)
     } else {
         None
     };

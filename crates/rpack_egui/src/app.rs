@@ -1,10 +1,10 @@
 use crossbeam::queue::SegQueue;
 use egui::containers::menu::MenuButton;
-use egui::Grid;
 use egui::{
     util::undoer::Undoer, Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout,
     RichText, Sense, Slider, Ui,
 };
+use egui::{Grid, Vec2};
 use egui_extras::{Column, TableBuilder};
 use once_cell::sync::Lazy;
 use rpack_cli::TilemapGenerationConfig;
@@ -14,7 +14,7 @@ use rpack_cli::{
 use texture_packer::{Rect, TexturePackerConfig};
 
 use crate::helpers::DroppedFileHelper;
-static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(|| SegQueue::new());
+static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(SegQueue::new);
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const GIT_HASH: &str = env!("GIT_HASH");
 pub const VERSION: &str = concat!(" v ", env!("CARGO_PKG_VERSION"), " ");
@@ -476,10 +476,8 @@ impl eframe::App for Application {
                     );
                     ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(10.0);
-                        if self.output.is_none() {
-                            if ui.add(egui::Button::new("Open")).clicked() {
-                                self.read_files();
-                            }
+                        if self.output.is_none() && ui.add(egui::Button::new("Open")).clicked() {
+                            self.read_files();
                         }
                         if self.output.is_ok() {
                             if ui.add(egui::Button::new("Save atlas image")).clicked() {
@@ -517,19 +515,15 @@ impl eframe::App for Application {
                         let Ok(dir) = path.read_dir() else {
                             continue;
                         };
-                        for entry in dir {
-                            if let Ok(entry) = entry {
-                                if let Some(dyn_image) =
-                                    entry.metadata().ok().and_then(|metadata| {
-                                        if metadata.is_file() {
-                                            entry.create_image("")
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                {
-                                    INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
+                        for entry in dir.flatten() {
+                            if let Some(dyn_image) = entry.metadata().ok().and_then(|metadata| {
+                                if metadata.is_file() {
+                                    entry.create_image("")
+                                } else {
+                                    None
                                 }
+                            }) {
+                                INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
                             }
                         }
                     } else {
@@ -538,7 +532,7 @@ impl eframe::App for Application {
                         };
                         if path.to_string_lossy().ends_with(".rpack_gen.json") {
                             if let Ok(config) =
-                                rpack_cli::TilemapGenerationConfig::read_from_file(&path)
+                                rpack_cli::TilemapGenerationConfig::read_from_file(path)
                             {
                                 INPUT_QUEUE
                                     .push(AppImageAction::ReadFromConfig(config, path.clone()));
@@ -597,17 +591,24 @@ impl eframe::App for Application {
                             let mut changed = false;
                             Grid::new("settings_grid")
                                 .num_columns(2)
-                                .spacing((10.0, 10.0))
+                                .spacing((0.0, 10.0))
                                 .striped(true)
                                 .show(ui, |ui| {
                                     ui.style_mut().visuals.faint_bg_color =
                                         Color32::from_white_alpha(15);
                                     ui.style_mut().interaction.selectable_labels = false;
                                     let id = ui.label("File Name").id;
-                                    changed |= ui
+                                    if ui
                                         .text_edit_singleline(&mut self.data.settings.output_path)
                                         .labelled_by(id)
-                                        .changed();
+                                        .changed()
+                                    {
+                                        if let SpriteSheetState::Ok(data) = &mut self.output {
+                                            data.atlas_asset.filename =
+                                                self.data.settings.output_path.clone();
+                                            data.rebuild_json();
+                                        }
+                                    }
                                     ui.end_row();
                                     ui.label("Output size");
                                     let selected_size = match self.data.settings.size {
@@ -639,7 +640,7 @@ impl eframe::App for Application {
                                         false
                                     })
                                     .1
-                                    .map_or(false, |s| s.inner);
+                                    .is_some_and(|s| s.inner);
                                     ui.end_row();
                                     changed |= slider_field(
                                         ui,
@@ -657,15 +658,20 @@ impl eframe::App for Application {
                                         0..=10,
                                     );
                                     ui.end_row();
-                                    let mut serialize_metadata = self
+                                    let mut skip_metadata = self
                                         .data
                                         .settings
                                         .skip_serializing_metadata
                                         .unwrap_or_default();
                                     ui.label("Skip Metadata Serialization");
-                                    if ui.checkbox(&mut serialize_metadata, "").changed() {
+                                    if ui.checkbox(&mut skip_metadata, "").changed() {
                                         self.data.settings.skip_serializing_metadata =
-                                            Some(serialize_metadata);
+                                            Some(skip_metadata);
+                                        if let SpriteSheetState::Ok(data) = &mut self.output {
+                                            data.atlas_asset.metadata.skip_serialization =
+                                                skip_metadata;
+                                            data.rebuild_json();
+                                        }
                                     }
                                 });
                             ui.vertical_centered_justified(|ui| {
@@ -902,10 +908,8 @@ impl eframe::App for Application {
                             let SpriteSheetState::Ok(data) = &self.output else {
                                 return;
                             };
-                            // ui.add_space(10.0);
-                            // ui.heading(
-                            //     egui::RichText::new("Created atlas").color(MY_ACCENT_COLOR32),
-                            // );
+                            ui.add(Image::from_uri("bytes://output.png").bg_fill(Color32::from_black_alpha(200)).max_size(Vec2::new(512.0,512.0)));
+                            ui.separator();
                             ui.add_space(10.0);
                             ui.horizontal(|ui|{
                                 ui.label(format!(
@@ -935,10 +939,6 @@ impl eframe::App for Application {
 
                             });
 
-                            ui.add_space(10.0);
-                            ui.separator();
-                            ui.add(Image::from_uri("bytes://output.png").bg_fill(Color32::from_black_alpha(200)));
-                            ui.separator();
                             ui.add_space(20.0);
                         });
                     });

@@ -21,6 +21,14 @@ pub struct Spritesheet {
     pub atlas_asset_json: Value,
 }
 
+impl Spritesheet {
+    pub fn rebuild_json(&mut self) {
+        if let Ok(value) = serde_json::to_value(&self.atlas_asset) {
+            self.atlas_asset_json = value;
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub struct ImageFile {
     pub id: String,

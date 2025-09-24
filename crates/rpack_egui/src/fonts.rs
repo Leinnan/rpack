@@ -111,7 +111,6 @@ fn font_dirs() -> Vec<String> {
                     .nth(2)
                     .map(|p| p.join("Resources/fonts").to_string_lossy().into_owned())
             }) {
-                eprintln!("{}", &resources_font_dir);
                 dirs.push(resources_font_dir);
             }
         }

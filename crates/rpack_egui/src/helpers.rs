@@ -80,10 +80,8 @@ impl DroppedFileHelper for DroppedFile {
     }
 
     fn dynamic_image(&self) -> Option<DynamicImage> {
-        let bytes = self.bytes.as_ref().clone()?;
+        let bytes = self.bytes.as_ref()?;
 
-        ImageImporter::import_from_memory(bytes)
-            .ok()
-            .map(|r| r.into())
+        ImageImporter::import_from_memory(bytes).ok()
     }
 }
