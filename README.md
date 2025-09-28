@@ -111,6 +111,11 @@ Example:
       "key": "tiles/agents/spaceAstronauts_004"
     },
   ],
+  "metadata": {
+    "app": "rpack",
+    "app_version": "0.3.0",
+    "format_version": 1
+  },
   "size": [
     512,
     512
@@ -148,11 +153,6 @@ Example:
   "size": 512,
   "texture_padding": 2,
   "border_padding": 2,
-  "metadata": {
-    "app": "rpack",
-    "app_version": "0.3.0",
-    "format_version": 1
-  },
   "size": [
     512,
     512

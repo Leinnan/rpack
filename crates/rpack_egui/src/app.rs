@@ -2,9 +2,9 @@ use crossbeam::queue::SegQueue;
 use egui::containers::menu::MenuButton;
 use egui::{
     util::undoer::Undoer, Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout,
-    RichText, Sense, Slider, Ui,
+    RichText, Slider, Ui,
 };
-use egui::{Grid, Vec2};
+use egui::{Checkbox, Grid, Vec2};
 use egui_extras::{Column, TableBuilder};
 use once_cell::sync::Lazy;
 use rpack_cli::TilemapGenerationConfig;
@@ -14,6 +14,7 @@ use rpack_cli::{
 use texture_packer::{Rect, TexturePackerConfig};
 
 use crate::helpers::DroppedFileHelper;
+use crate::view_settings::ViewSettings;
 static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(SegQueue::new);
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const GIT_HASH: &str = env!("GIT_HASH");
@@ -71,6 +72,8 @@ pub struct Application {
     last_error: Option<SpritesheetError>,
     undoer: Undoer<ApplicationData>,
     last_editor_paths: Vec<String>,
+    view_settings: ViewSettings,
+    show_modal: bool,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Clone, PartialEq)]
@@ -113,6 +116,8 @@ impl Default for Application {
             output: SpriteSheetState::Empty,
             last_error: None,
             last_editor_paths: Vec::new(),
+            view_settings: Default::default(),
+            show_modal: false,
         }
     }
 }
@@ -203,8 +208,14 @@ impl Application {
         } else {
             Default::default()
         };
+        let view_settings: ViewSettings = if let Some(storage) = cc.storage {
+            eframe::get_value(storage, "view_settings").unwrap_or_default()
+        } else {
+            Default::default()
+        };
         let mut app = Self {
             last_editor_paths,
+            view_settings,
             ..Default::default()
         };
         cc.egui_ctx.include_bytes("bytes://image.png", ICON_DATA);
@@ -356,6 +367,7 @@ impl eframe::App for Application {
     /// Called by the framework to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, &self.last_editor_paths);
+        eframe::set_value(storage, "view_settings", &self.view_settings);
     }
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -451,6 +463,39 @@ impl eframe::App for Application {
             if rebuild {
                 self.rebuild_image_data();
                 self.build_atlas(ctx);
+            }
+        }
+        if self.show_modal {
+            let mut should_close = false;
+
+            should_close |= egui::Modal::new("VisualSettings".into())
+                .frame(egui::Frame::menu(&ctx.style()).inner_margin(10.0))
+                .show(ctx, |ui| {
+                    ui.style_mut().interaction.selectable_labels = false;
+                    ui.vertical_centered(|ui| {
+                        ui.heading("Settings");
+                        ui.add_space(15.0);
+                        Grid::new("settings_grid")
+                            .num_columns(2)
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.add(Label::new("Max Preview size"));
+                                ui.add(Slider::new(
+                                    &mut self.view_settings.preview_max_size,
+                                    256.0..=1024.0,
+                                ));
+                                ui.end_row();
+                                ui.add(Label::new("Display JSON"));
+                                ui.add(Checkbox::new(&mut self.view_settings.display_json, ""));
+                                ui.end_row();
+                            });
+                        ui.add_space(10.0);
+                        should_close |= ui.button("Close").clicked();
+                    });
+                })
+                .should_close();
+            if should_close {
+                self.show_modal = false;
             }
         }
         egui::TopBottomPanel::top("topPanel")
@@ -552,7 +597,12 @@ impl eframe::App for Application {
                 #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("bottom_panel");
                 ui.add_space(5.0);
+
                 ui.horizontal(|ui| {
+                    ui.add_space(5.0);
+                    if ui.button("🛠").on_hover_text("Visual settings").clicked() {
+                        self.show_modal = true;
+                    }
                     ui.add_space(5.0);
                     ui.add_enabled_ui(self.undoer.has_undo(&self.data), |ui| {
                         if ui.button("⮪").on_hover_text("Go back").clicked() {
@@ -582,10 +632,11 @@ impl eframe::App for Application {
             .max_width(400.0)
             .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10))
             .show_animated(ctx, !self.data.image_data.is_empty(), |ui| {
-                egui::ScrollArea::vertical()
-                    .id_salt("rightPanel_scroll")
-                    .show(ui, |ui| {
-                        ui.add_enabled_ui(!self.output.is_building(), |ui| {
+                ui.with_layout(
+                    Layout::top_down(egui::Align::Min).with_cross_justify(true),
+                    |ui| {
+                        ui.style_mut().interaction.selectable_labels = false;
+                        {
                             #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                             puffin::profile_scope!("right_panel");
                             let mut changed = false;
@@ -674,155 +725,94 @@ impl eframe::App for Application {
                                         }
                                     }
                                 });
-                            ui.vertical_centered_justified(|ui| {
-                                ui.add_space(10.0);
-
-                                // changed |= ui.checkbox(&mut
-                                //     self.data.settings., "Force Max Dimensions").changed();
-                                // ui.checkbox(&mut self.config.allow_rotation, "Allow Rotation")
-                                // .on_hover_text("True to allow rotation of the input images. Default value is `true`. Images rotated will be rotated 90 degrees clockwise.");
-                                // ui.checkbox(&mut self.data.config.texture_outlines, "Texture Outlines")
-                                // .on_hover_text("Draw the red line on the edge of the each frames. Useful for debugging.");
-
-                                ui.add_space(10.0);
-                            });
                             if changed {
                                 INPUT_QUEUE.push(AppImageAction::RebuildAtlas);
                             }
+                        }
+                        Grid::new("ImgesHeader")
+                            .num_columns(2)
+                            .spacing([50.0, 10.0])
+                            .show(ui, |ui| {
+                                ui.menu_button("🖼", |ui| {
+                                    if !self.data.image_data.is_empty()
+                                        && ui
+                                            .add(
+                                                egui::Button::new("Remove all images").frame(false),
+                                            )
+                                            .clicked()
+                                    {
+                                        INPUT_QUEUE.push(AppImageAction::Clear);
+                                    }
+                                    ui.add_space(10.0);
+
+                                    if ui
+                                        .add(egui::Button::new("Add more images").frame(false))
+                                        .clicked()
+                                    {
+                                        self.read_files();
+                                    }
+                                });
+                                ui.heading("Images");
+                            });
+
+                        ui.add_enabled_ui(!self.output.is_building(), |ui| {
                             ui.separator();
                             {
-                                ui.style_mut().interaction.selectable_labels = false;
                                 #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                                 puffin::profile_scope!("image_list");
 
-                                ui.horizontal(|ui| {
-                                    ui.heading("Images");
-                                    ui.with_layout(
-                                        Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if !self.data.image_data.is_empty()
-                                                && ui
-                                                    .add(egui::Button::new("🗙").frame(false))
-                                                    .on_hover_text("Remove all images")
-                                                    .clicked()
-                                            {
-                                                INPUT_QUEUE.push(AppImageAction::Clear);
-                                            }
-                                            ui.add_space(10.0);
-
-                                            if ui
-                                                .add(egui::Button::new("⊞").frame(false))
-                                                .on_hover_text("Add more images")
-                                                .clicked()
-                                            {
-                                                self.read_files();
-                                            }
-                                            if ui.available_width() > 15.0 {
-                                                ui.add_space(ui.available_width() - 10.0);
-                                            }
-                                        },
-                                    )
-                                });
                                 let length = self.data.image_data.len();
-                                let text_height =
-                                    egui::TextStyle::Body.resolve(ui.style()).size * 1.5;
-
                                 let table = TableBuilder::new(ui)
                                     .striped(true)
                                     .vscroll(true)
                                     .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                                    .column(Column::remainder().at_least(50.0))
                                     .column(Column::exact(70.0))
-                                    .column(Column::auto().at_most(150.0).at_least(30.0))
-                                    .column(Column::auto())
+                                    .column(Column::remainder().at_least(50.0))
                                     .sense(egui::Sense::click());
-                                table
-                                    .header(text_height, |mut row| {
-                                        row.col(|col| {
-                                            col.vertical_centered_justified(|ui| {
-                                                ui.add(
-                                                    egui::Label::new("Name")
-                                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                                        .selectable(false), // .sense(Sense::click()),
-                                                )
-                                            });
-                                        });
-                                        row.col(|col| {
-                                            col.vertical_centered_justified(|ui| {
-                                                ui.add(
-                                                    egui::Label::new("Preview")
-                                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                                        .selectable(false),
-                                                )
-                                            });
-                                        });
-                                        row.col(|col| {
-                                            col.vertical_centered_justified(|ui| {
-                                                ui.add(
-                                                    egui::Label::new("Dimensions")
-                                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                                        .selectable(false)
-                                                        .sense(Sense::click()),
-                                                )
-                                            });
-                                        });
-
-                                        row.col(|col| {
-                                            col.vertical_centered_justified(|ui| {
-                                                ui.add(
-                                                    egui::Label::new("")
-                                                        .wrap_mode(egui::TextWrapMode::Truncate)
-                                                        .selectable(false),
-                                                )
-                                            });
-                                        });
-                                    })
-                                    .body(|body| {
-                                        body.rows(64.0, length, |mut row| {
-                                            let index = row.index();
-                                            let file = &self.data.image_data[index];
-                                            row.col(|ui| {
-                                                ui.add(
-                                                    Label::new(file.id())
-                                                        .selectable(false)
-                                                        .wrap_mode(egui::TextWrapMode::Truncate),
-                                                );
-                                            });
-                                            row.col(|ui| {
-                                                ui.vertical_centered_justified(|ui| {
-                                                    ui.add_sized(
-                                                        (64.0, 64.0),
-                                                        Image::from_uri(format!(
-                                                            "bytes://{}",
-                                                            file.path.as_str()
-                                                        ))
-                                                        .corner_radius(5u8),
-                                                    );
-                                                });
-                                            });
-                                            row.col(|ui| {
-                                                ui.add(
-                                                    Label::new(format!(
-                                                        "{}x{}",
-                                                        file.width, file.height
+                                table.body(|body| {
+                                    body.rows(64.0, length, |mut row| {
+                                        let index = row.index();
+                                        let file = &self.data.image_data[index];
+                                        row.col(|ui| {
+                                            ui.vertical_centered_justified(|ui| {
+                                                ui.add_sized(
+                                                    (64.0, 64.0),
+                                                    Image::from_uri(format!(
+                                                        "bytes://{}",
+                                                        file.path.as_str()
                                                     ))
-                                                    .selectable(false),
-                                                );
+                                                    .corner_radius(5u8),
+                                                )
+                                                .on_hover_text(format!(
+                                                    "{}x{}",
+                                                    file.width, file.height
+                                                ));
                                             });
-                                            row.col(|ui| {
+                                        });
+                                        row.col(|ui| {
+                                            ui.add(
+                                                Label::new(file.id())
+                                                    .selectable(false)
+                                                    .wrap_mode(egui::TextWrapMode::Truncate),
+                                            );
+                                        })
+                                        .1
+                                        .context_menu(
+                                            |ui| {
                                                 if ui
-                                                    .add(Button::new("🗙").frame(false))
-                                                    .on_hover_text("Remove")
+                                                    .add(Button::new("Remove").frame(false))
                                                     .clicked()
                                                 {
                                                     INPUT_QUEUE.push(AppImageAction::Remove(index));
                                                 }
-                                            });
-                                        });
+                                            },
+                                        );
                                     });
+                                });
                             }
                         });
-                    });
+                    },
+                );
             });
         egui::CentralPanel::default()
             .frame(Frame::central_panel(&ctx.style()).inner_margin(16i8))
@@ -908,19 +898,17 @@ impl eframe::App for Application {
                             let SpriteSheetState::Ok(data) = &self.output else {
                                 return;
                             };
-                            ui.add(Image::from_uri("bytes://output.png").bg_fill(Color32::from_black_alpha(200)).max_size(Vec2::new(512.0,512.0)));
+                            ui.add(Image::from_uri("bytes://output.png").bg_fill(Color32::from_black_alpha(200)).max_size(Vec2::splat(self.view_settings.preview_max_size))).on_hover_text(format!(
+                                "{} sprites\nsize: {}x{}",
+                                data.atlas_asset.frames.len(),
+                                data.atlas_asset.size[0],
+                                data.atlas_asset.size[1]
+                            ));
                             ui.separator();
                             ui.add_space(10.0);
                             ui.horizontal(|ui|{
-                                ui.label(format!(
-                                    "{} sprites\nsize: {}x{}",
-                                    data.atlas_asset.frames.len(),
-                                    data.atlas_asset.size[0],
-                                    data.atlas_asset.size[1]
-                                ));
-                                ui.separator();
+                                if self.view_settings.display_json {
                                 ui.vertical_centered_justified(|ui|{
-
                                     ui.add_space(10.0);
                                     if ui
                                         .add(egui::Button::new("Copy JSON to Clipboard"))
@@ -929,13 +917,14 @@ impl eframe::App for Application {
                                         ui.ctx()
                                             .copy_text(data.atlas_asset_json.to_string());
                                     };
-                                    ui.add_space(10.0);
-                                    egui_json_tree::JsonTree::new(
-                                        "simple-tree",
-                                        &data.atlas_asset_json,
-                                    )
-                                    .show(ui);
+                                        ui.add_space(10.0);
+                                        egui_json_tree::JsonTree::new(
+                                            "simple-tree",
+                                            &data.atlas_asset_json,
+                                        )
+                                        .show(ui);
                                 });
+                                }
 
                             });
 
