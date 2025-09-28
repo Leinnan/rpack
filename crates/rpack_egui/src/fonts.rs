@@ -1,5 +1,3 @@
-use std::path::Path;
-
 pub fn setup_custom_fonts(ctx: &egui::Context) {
     // Start with the default fonts (we will be adding to them rather than replacing them).
     let mut fonts = egui::FontDefinitions::default();
@@ -79,6 +77,8 @@ fn try_get_font_from_list(font_names: &[&str]) -> Option<Vec<u8>> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn try_get_font(font_name: &str) -> Option<Vec<u8>> {
+    use std::path::Path;
+
     for dir in font_dirs() {
         if let Ok(font) = std::fs::read(Path::new(&dir).join(format!("{}.ttf", font_name))) {
             return Some(font);
