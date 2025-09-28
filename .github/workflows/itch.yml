@@ -2,11 +2,12 @@ name: itch.io Build
 
 # By default, runs if you push to master. keeps your deployed app in sync with master branch.
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "README.md"
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - main
+  #   paths-ignore:
+  #     - "README.md"
 # to only run when you do a new github release, comment out above part and uncomment the below trigger.
 # on:
 #   release:
