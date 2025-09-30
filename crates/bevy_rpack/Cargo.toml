@@ -12,15 +12,19 @@ exclude = ["assets", "tiles", "*.rpack_gen.json", "justfile"]
 
 [features]
 default = ["bevy"]
-bevy = ["dep:bevy"]
+bevy = ["dep:bevy_app", "dep:bevy_platform", "dep:bevy_math", "dep:bevy_image", "dep:bevy_asset", "dep:bevy_ecs", "dep:bevy_reflect", "dep:bevy_ui", "dep:bevy_derive", "dep:bevy_sprite"]
 
 [dependencies]
-bevy = { version = "0.16", optional = true, default-features = false, features = [
-    "bevy_asset",
-    "bevy_sprite",
-    "bevy_image",
-    "bevy_ui"
-] }
+bevy_math = { version = "0.16", optional = true }
+bevy_image = { version = "0.16", optional = true }
+bevy_app = { version = "0.16", optional = true }
+bevy_asset = { version = "0.16", optional = true }
+bevy_ecs = { version = "0.16", optional = true }
+bevy_reflect = { version = "0.16", optional = true }
+bevy_ui = { version = "0.16", optional = true }
+bevy_derive = { version = "0.16", optional = true }
+bevy_platform = { version = "0.16", optional = true }
+bevy_sprite = { version = "0.16", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

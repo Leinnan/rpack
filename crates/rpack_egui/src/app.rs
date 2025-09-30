@@ -1,3 +1,5 @@
+use crate::helpers::DroppedFileHelper;
+use crate::view_settings::ViewSettings;
 use crossbeam::queue::SegQueue;
 use egui::containers::menu::MenuButton;
 use egui::{
@@ -12,9 +14,6 @@ use rpack_cli::{
     packer::SkylinePacker, ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError,
 };
 use texture_packer::{Rect, TexturePackerConfig};
-
-use crate::helpers::DroppedFileHelper;
-use crate::view_settings::ViewSettings;
 static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(SegQueue::new);
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const GIT_HASH: &str = env!("GIT_HASH");
@@ -198,7 +197,6 @@ impl Application {
     /// Called once before the first frame.
     #[allow(dead_code, unused_variables, unused_mut)]
     pub fn new(cc: &eframe::CreationContext<'_>, config_file: Option<String>) -> Self {
-        crate::fonts::setup_custom_fonts(&cc.egui_ctx);
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
         egui_extras::install_image_loaders(&cc.egui_ctx);
@@ -213,6 +211,13 @@ impl Application {
         } else {
             Default::default()
         };
+        cc.egui_ctx.all_styles_mut(|style| {
+            for font_id in style.text_styles.values_mut() {
+                font_id.size *= 1.4;
+            }
+        });
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::fonts::load_fonts(&cc.egui_ctx);
         let mut app = Self {
             last_editor_paths,
             view_settings,

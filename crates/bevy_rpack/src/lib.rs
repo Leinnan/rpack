@@ -1,6 +1,10 @@
 #![doc = include_str!("../README.md")]
 extern crate alloc;
 use alloc::borrow::Cow;
+#[cfg(feature = "bevy")]
+use bevy_asset::Asset;
+#[cfg(feature = "bevy")]
+use bevy_reflect::Reflect;
 
 #[cfg(feature = "bevy")]
 /// Contains the Bevy plugin for handling `Rpack` assets and atlases.
@@ -20,7 +24,7 @@ pub mod prelude {
 
 /// Defines a rectangle in pixels with the origin at the top-left of the texture atlas.
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Reflect))]
+#[cfg_attr(feature = "bevy", derive(Reflect))]
 pub struct SerializableRect {
     /// Horizontal position the rectangle begins at.
     pub x: u32,
@@ -34,7 +38,7 @@ pub struct SerializableRect {
 
 /// Represents a single frame within a texture atlas, including its identifier and position.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Reflect))]
+#[cfg_attr(feature = "bevy", derive(Reflect))]
 pub struct AtlasFrame {
     /// A unique identifier for the frame.
     pub key: String,
@@ -44,7 +48,7 @@ pub struct AtlasFrame {
 
 /// Represents an entire texture atlas asset, including its metadata and frames.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Asset, bevy::prelude::Reflect))]
+#[cfg_attr(feature = "bevy", derive(Asset, Reflect))]
 pub struct AtlasAsset {
     /// The overall dimensions of the texture atlas in pixels (width, height).
     pub size: [u32; 2],
@@ -60,7 +64,7 @@ pub struct AtlasAsset {
 
 /// Represents metadata associated with the texture atlas format.
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "bevy", derive(bevy::prelude::Reflect))]
+#[cfg_attr(feature = "bevy", derive(Reflect))]
 pub struct AtlasMetadata {
     /// The version of the texture atlas format.
     pub format_version: u32,

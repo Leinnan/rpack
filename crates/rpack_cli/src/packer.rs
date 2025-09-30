@@ -63,8 +63,8 @@ impl SkylinePacker {
     }
 
     pub fn find_skyline(&self, w: u32, h: u32) -> Option<(usize, Rect)> {
-        let mut bottom = std::u32::MAX;
-        let mut width = std::u32::MAX;
+        let mut bottom = u32::MAX;
+        let mut width = u32::MAX;
         let mut index = None;
         let mut rect = Rect::new(0, 0, 0, 0);
 

@@ -1,9 +1,15 @@
 use crate::{AtlasAsset, SerializableRect};
-use bevy::asset::{AssetLoader, AsyncReadExt};
-use bevy::ecs::system::SystemParam;
-use bevy::image::ImageSampler;
-use bevy::platform::collections::HashMap;
-use bevy::prelude::*;
+use bevy_app::{App, Plugin};
+use bevy_asset::{Asset, AssetApp, Assets, Handle, ReflectAsset};
+use bevy_asset::{AssetLoader, AsyncReadExt};
+use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::system::{Res, SystemParam};
+use bevy_image::{Image, ImageSampler, TextureAtlas, TextureAtlasLayout};
+use bevy_math::{URect, UVec2};
+use bevy_platform::collections::HashMap;
+use bevy_reflect::Reflect;
+use bevy_sprite::Sprite;
+use bevy_ui::widget::ImageNode;
 use thiserror::Error;
 
 /// Errors that can occur while accessing and creating components from [`RpackAtlasAsset`].
@@ -19,6 +25,7 @@ pub enum RpackAtlasError {
 
 /// This is an asset containing the texture atlas image, the texture atlas layout, and a map of the original file names to their corresponding indices in the texture atlas.
 #[derive(Asset, Debug, Reflect)]
+#[reflect(Asset, Debug)]
 pub struct RpackAtlasAsset {
     /// The texture atlas image.
     pub image: Handle<Image>,
@@ -180,7 +187,7 @@ pub enum RpackAtlasAssetError {
     /// A Bevy [`LoadDirectError`](bevy::asset::LoadDirectError) that occured
     /// while loading a [`RpackAtlasAsset::image`](crate::RpackAtlasAsset::image).
     #[error("could not load asset: {0}")]
-    LoadDirect(Box<bevy::asset::LoadDirectError>),
+    LoadDirect(Box<bevy_asset::LoadDirectError>),
     /// An error that can occur if there is
     /// trouble loading the image asset of
     /// an atlas.
@@ -188,8 +195,8 @@ pub enum RpackAtlasAssetError {
     LoadingImageAsset(String),
 }
 
-impl From<bevy::asset::LoadDirectError> for RpackAtlasAssetError {
-    fn from(value: bevy::asset::LoadDirectError) -> Self {
+impl From<bevy_asset::LoadDirectError> for RpackAtlasAssetError {
+    fn from(value: bevy_asset::LoadDirectError) -> Self {
         Self::LoadDirect(Box::new(value))
     }
 }
@@ -209,7 +216,7 @@ pub struct RpackAtlasAssetLoaderSettings {
 impl Default for RpackAtlasAssetLoaderSettings {
     fn default() -> Self {
         Self {
-            image_sampler: ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor::nearest()),
+            image_sampler: ImageSampler::Descriptor(bevy_image::ImageSamplerDescriptor::nearest()),
         }
     }
 }
@@ -229,9 +236,9 @@ impl AssetLoader for RpackAtlasAssetLoader {
 
     async fn load(
         &self,
-        reader: &mut dyn bevy::asset::io::Reader,
+        reader: &mut dyn bevy_asset::io::Reader,
         settings: &RpackAtlasAssetLoaderSettings,
-        load_context: &mut bevy::asset::LoadContext<'_>,
+        load_context: &mut bevy_asset::LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
         let mut file = String::new();
         reader.read_to_string(&mut file).await?;
