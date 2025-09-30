@@ -16,12 +16,12 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.insert_resource(Holder(asset_server.load("tilemap.rpack.json")));
     commands.spawn(Camera2d);
+    commands.insert_resource(Holder(asset_server.load("tilemap.rpack.json")));
 }
 
 fn atlas_loaded(
-    mut ev_asset: EventReader<AssetEvent<RpackAtlasAsset>>,
+    mut ev_asset: MessageReader<AssetEvent<RpackAtlasAsset>>,
     atlases: RpackAtlases,
     mut commands: Commands,
 ) {
@@ -31,10 +31,17 @@ fn atlas_loaded(
     {
         return;
     }
-    if let Ok(sprite) = atlases.try_make_sprite("agents/spaceAstronauts_005") {
-        commands.spawn(sprite);
-    };
-    if let Ok(image_node) = atlases.try_make_image_node("agents/spaceShips_006") {
-        commands.spawn(image_node);
+    info!("Atlas loaded");
+    match atlases.try_make_sprite("agents/spaceAstronauts_005") {
+        Ok(sprite) => {
+            commands.spawn((sprite, Transform::from_xyz(0.0, 20.0, 0.0)));
+        }
+        Err(e) => error!("Error loading sprite: {}", e),
+    }
+    match atlases.try_make_image_node("agents/spaceShips_006") {
+        Ok(image_node) => {
+            commands.spawn(image_node);
+        }
+        Err(e) => error!("Error loading sprite for image node: {}", e),
     }
 }
