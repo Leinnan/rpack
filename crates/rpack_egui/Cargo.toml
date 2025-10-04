@@ -3,12 +3,13 @@ name = "rpack_egui"
 version = "0.3.0"
 description = "GUI application for generating rpack atlases"
 authors = ["Piotr Siuszko <siuszko@zoho.com>"]
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/Leinnan/rpack.git"
 homepage = "https://github.com/Leinnan/rpack"
 license = "MIT OR Apache-2.0"
 
 [features]
+default = []
 profiler = ["dep:puffin", "dep:puffin_http", "dep:profiling"]
 
 [dependencies]
@@ -29,14 +30,13 @@ texture_packer = { workspace = true }
 image = { workspace = true }
 egui_extras = { version = "0.32", features = ["all_loaders"] }
 rfd = { version = "0.15", features = [] }
-wasm-bindgen-futures = "0.4"
 anyhow = "1"
 crossbeam = "0.8"
 once_cell = "1"
-futures = "0.3.12"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+futures = "0.3.12"
 puffin = {version = "0.19", optional = true}
 puffin_http = {version = "0.16", optional = true}
 profiling = {version = "1.0.16", optional = true, default-features = false , features = ["profile-with-puffin"] }
