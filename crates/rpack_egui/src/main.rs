@@ -61,7 +61,7 @@ fn main() {
 
     wasm_bindgen_futures::spawn_local(async {
         use web_sys::wasm_bindgen::JsCast;
-        use web_sys::{window, HtmlCanvasElement};
+        use web_sys::{HtmlCanvasElement, window};
         let canvas = window()
             .and_then(|w| w.document())
             .and_then(|d| d.get_element_by_id("the_canvas_id"))

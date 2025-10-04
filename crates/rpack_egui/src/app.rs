@@ -3,15 +3,15 @@ use crate::view_settings::ViewSettings;
 use crossbeam::queue::SegQueue;
 use egui::containers::menu::MenuButton;
 use egui::{
-    util::undoer::Undoer, Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout,
-    RichText, Slider, Ui,
+    Button, Color32, FontFamily, FontId, Frame, Image, Label, Layout, RichText, Slider, Ui,
+    util::undoer::Undoer,
 };
 use egui::{Checkbox, Grid, Vec2};
 use egui_extras::{Column, TableBuilder};
 use once_cell::sync::Lazy;
 use rpack_cli::TilemapGenerationConfig;
 use rpack_cli::{
-    packer::SkylinePacker, ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError,
+    ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError, packer::SkylinePacker,
 };
 use texture_packer::{Rect, TexturePackerConfig};
 static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(SegQueue::new);
