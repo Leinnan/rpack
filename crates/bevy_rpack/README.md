@@ -40,12 +40,12 @@ With those files generated it should be possible to use atlases like in the exam
 
 #### Bonus- generating tilemaps on build/runtime
 
-Since `rpack_cli` is a rust library it can be called easily from Bevy application. 
+Since `rpack_cli` is a rust library it can be called easily from Bevy application.
 It can be useful for building special version of the game for artists in the team so they can run the game and be sure that they don't forget to rebuild atlases after doing changes in graphics.
 
 In order to achieve that add this dependency to the project:
 ```toml
-rpack_cli = "0.1"
+rpack_cli = "0.3"
 ```
 Then in `main.rs` just before `App::new()` add something like this:
 
@@ -56,7 +56,7 @@ rpack_cli::TilemapGenerationConfig::read_from_file("example_config.rpack_gen.jso
     .expect("Failed to generate tilemap");
 ```
 
-Then on each run of the game it will regenerate the atlas before running the game. 
+Then on each run of the game it will regenerate the atlas before running the game.
 
 > Disclaimer: It should be used carefully and in most cases be called only in development builds on desktop platforms.
 

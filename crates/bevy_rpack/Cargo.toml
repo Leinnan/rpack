@@ -8,7 +8,7 @@ homepage = "https://github.com/Leinnan/rpack"
 authors = ["Piotr Siuszko <siuszko@zoho.com>"]
 license = "MIT OR Apache-2.0"
 keywords = ["bevy", "2d", "plugin"]
-exclude = ["assets", "tiles", "*.rpack_gen.json", "justfile"]
+include = ["*.rs"]
 
 [features]
 default = ["bevy"]
