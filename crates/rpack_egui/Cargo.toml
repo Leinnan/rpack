@@ -56,6 +56,11 @@ web-sys = { version = "0.3", features = [
 ] }
 js-sys = "0.3"
 
+[build-dependencies]
+winresource = "0.1.19"
+image = { version = "0.25", features = ["png"] }
+ico = "0.4.0"
+
 [package.metadata.bundle]
 name = "Rpack"
 icon = ["static/base_icon.png"]
