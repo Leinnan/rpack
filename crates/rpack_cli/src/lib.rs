@@ -363,9 +363,8 @@ impl TilemapGenerationConfig {
                 }
             }
         };
-        let working_dir = std::path::absolute(dir).unwrap_or_default();
 
-        working_dir
+        std::path::absolute(dir).unwrap_or_default()
     }
 
     pub fn generate(&self) -> anyhow::Result<()> {
