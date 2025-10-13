@@ -12,4 +12,4 @@ create_mac_installer: bundle
 
 # Create the installer using cargo-bundler
 bundle:
-    cargo bundler -r
+    cargo bundler -r {{format_bundle}}
