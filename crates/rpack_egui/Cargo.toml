@@ -20,6 +20,7 @@ eframe = { version = "0.33", default-features = false, features = [
     # "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
+    "wayland",       # To support Linux (and CI)
 ] }
 log = "0.4"
 egui_json_tree = "0.14"
