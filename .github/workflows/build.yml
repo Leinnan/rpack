@@ -26,9 +26,12 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-build-
       - uses: extractions/setup-just@v2
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-bundle
+      - name: Install Cargo Bundle
+        run: cargo install --git https://github.com/Leinnan/cargo-bundler
+      - name: Build
+        working-directory: crates/rpack_egui
+        run: |
+          just bundle
       - name: Mac build
         if: startsWith(runner.os, 'macos')
         working-directory: crates/rpack_egui
@@ -38,39 +41,12 @@ jobs:
         run: |
           mkdir artifacts
           mv crates/rpack_egui/RpackInstaller.pkg artifacts/RpackInstaller.pkg
-      - name: Regular installer
-        if: ${{ startsWith(runner.os, 'ubuntu') }}
-        working-directory: crates/rpack_egui
-        run: |
-          just create_installer
-      - name: Windows build
-        if: ${{ startsWith(runner.os, 'windows') }}
-        working-directory: crates/rpack_egui
-        run: |
-          cargo build --release
       - name: Copy artifacts
-        if: ${{ startsWith(runner.os, 'windows') }}
-        run: |
-          mkdir artifacts
-          cp target/release/rpack_egui.exe artifacts/rpack_egui.exe
-      - name: Copy artifacts
-        if: ${{ startsWith(runner.os, 'ubuntu') }}
-        run: |
-          mkdir artifacts
-          cp target/release/bundle/deb/rpack_egui*.deb artifacts/
-          cp target/release/bundle/appimage/rpack_egui*.AppImage artifacts/
-      - uses: actions/upload-artifact@v4
-        if: startsWith(runner.os, 'macos')
-        with:
-          name: macos-installer
-          path: artifacts
-      - name: Copy artifacts
-        if: ${{ startsWith(runner.os, 'ubuntu') }}
-        run: |
-          mkdir artifacts
-          cp target/release/rpack_egui artifacts/rpack_egui
-      - uses: actions/upload-artifact@v4
         if: ${{ !startsWith(runner.os, 'macos') }}
+        run: |
+          mkdir artifacts
+          cp cp -r target/release/bundle/*/* artifacts/
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}
           path: artifacts
