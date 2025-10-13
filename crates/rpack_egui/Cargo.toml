@@ -14,22 +14,22 @@ profiler = ["dep:puffin", "dep:puffin_http", "dep:profiling"]
 accesskit = ["eframe/accesskit"]
 
 [dependencies]
-egui = "0.32"
-eframe = { version = "0.32", default-features = false, features = [
+egui = "0.33"
+eframe = { version = "0.33", default-features = false, features = [
     "persistence",
     # "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
 ] }
 log = "0.4"
-egui_json_tree = "0.13"
+egui_json_tree = "0.14"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 texture_packer = { workspace = true }
 image = { workspace = true }
-egui_extras = { version = "0.32", features = ["all_loaders"] }
+egui_extras = { version = "0.33", features = ["all_loaders"] }
 rfd = { version = "0.15", features = [] }
 anyhow = "1"
 crossbeam = "0.8"
