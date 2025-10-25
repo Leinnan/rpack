@@ -6,7 +6,7 @@
     <key>CFBundleName</key>
     <string>Rpack</string>
     <key>CFBundleIdentifier</key>
-    <string>io.github.leinnan.rpack</string>
+    <string>com.mevlyshkin.rpack</string>
     <key>CFBundleVersion</key>
     <string>0.3.0</string>
     <key>CFBundleExecutable</key>

@@ -1,7 +1,9 @@
 use std::io::Write;
+use std::path::PathBuf;
 
 use clap::Subcommand;
 use rpack_cli::TilemapGenerationConfig;
+use rpack_cli::saving::SaveableImage;
 
 use rpack_cli::SaveImageFormat;
 
@@ -56,6 +58,15 @@ pub enum Commands {
         #[clap(action)]
         config_path: String,
     },
+    /// Converts a texture between formats
+    Convert {
+        /// path of the config to create
+        #[clap(action)]
+        source_path: PathBuf,
+        /// path of the output texture
+        #[clap(action)]
+        output_path: PathBuf,
+    },
 }
 impl Commands {
     pub(crate) fn run(&self) -> anyhow::Result<()> {
@@ -95,7 +106,17 @@ impl Commands {
             Commands::GenerateFromConfig { config_path } => {
                 Self::generate_tilemap_from_config(config_path)
             }
+            Commands::Convert {
+                source_path,
+                output_path,
+            } => Self::convert(source_path, output_path),
         }
+    }
+
+    fn convert(source_path: PathBuf, output_path: PathBuf) -> anyhow::Result<()> {
+        let image = image::open(source_path)?;
+        image.save_with_format_autodetection(output_path)?;
+        Ok(())
     }
 
     fn generate_tilemap(

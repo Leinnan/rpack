@@ -6,13 +6,16 @@ use serde_json::Value;
 use std::io::Write;
 use std::{
     ffi::OsStr,
-    fmt::Display,
     path::{Path, PathBuf},
 };
 use texture_packer::{TexturePacker, TexturePackerConfig, importer::ImageImporter};
 use thiserror::Error;
 
+pub use crate::formats::SaveImageFormat;
+
+pub mod formats;
 pub mod packer;
+pub mod saving;
 
 #[derive(Clone)]
 pub struct Spritesheet {
@@ -87,30 +90,6 @@ where
     }
 
     prefix
-}
-
-#[derive(Clone, Debug, Default, Copy, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(
-    all(feature = "cli", not(target_arch = "wasm32")),
-    derive(clap::ValueEnum)
-)]
-pub enum SaveImageFormat {
-    #[default]
-    Png,
-    Dds,
-    #[cfg(feature = "basis")]
-    Basis,
-}
-
-impl Display for SaveImageFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SaveImageFormat::Png => f.write_str(".png"),
-            SaveImageFormat::Dds => f.write_str(".dds"),
-            #[cfg(feature = "basis")]
-            SaveImageFormat::Basis => f.write_str(".basis"),
-        }
-    }
 }
 
 /// Errors that can occur while building a `Spritesheet`.
@@ -203,77 +182,6 @@ impl Spritesheet {
             atlas_asset,
             atlas_asset_json,
         })
-    }
-
-    #[cfg(all(feature = "dds", not(target_arch = "wasm32")))]
-    pub fn save_as_dds<R>(&self, output_path: R)
-    where
-        R: AsRef<Path>,
-    {
-        let rgba_image = self.image_data.to_rgba8();
-
-        let dds = image_dds::dds_from_image(
-            &rgba_image,
-            image_dds::ImageFormat::Rgba8Unorm,
-            image_dds::Quality::Fast,
-            image_dds::Mipmaps::GeneratedAutomatic,
-        )
-        .unwrap();
-
-        let mut writer =
-            std::io::BufWriter::new(std::fs::File::create(output_path.as_ref()).unwrap());
-        dds.write(&mut writer).unwrap();
-    }
-
-    #[cfg(all(feature = "basis", not(target_arch = "wasm32")))]
-    pub fn save_as_basis<R>(&self, output_path: R) -> anyhow::Result<()>
-    where
-        R: AsRef<Path>,
-    {
-        use basis_universal::{BasisTextureFormat, Compressor, Transcoder};
-        use image::{EncodableLayout, GenericImageView};
-
-        let rgba_image = self.image_data.to_rgba8();
-
-        let channel_count = 4;
-        let (pixel_width, pixel_height) = self.image_data.dimensions();
-        let mut compressor_params = basis_universal::CompressorParams::new();
-        compressor_params.set_generate_mipmaps(true);
-        compressor_params.set_basis_format(BasisTextureFormat::ETC1S);
-        compressor_params.set_etc1s_quality_level(basis_universal::ETC1S_QUALITY_MAX);
-        compressor_params.set_print_status_to_stdout(false);
-        let mut compressor_image = compressor_params.source_image_mut(0);
-        compressor_image.init(
-            rgba_image.as_bytes(),
-            pixel_width,
-            pixel_height,
-            channel_count,
-        );
-
-        //
-        // Create the compressor and compress
-        //
-        let mut compressor = Compressor::default();
-        let compression_time = unsafe {
-            compressor.init(&compressor_params);
-            let t0 = std::time::Instant::now();
-            compressor.process().expect("Failed to compress the image.");
-            let t1 = std::time::Instant::now();
-            t1 - t0
-        };
-
-        // You could write it to disk like this
-        let basis_file = compressor.basis_file();
-        let transcoder = Transcoder::new();
-        let mip_level_count = transcoder.image_level_count(basis_file, 0);
-        println!(
-            "Compressed {} mip levels to {} total bytes in {} ms",
-            mip_level_count,
-            compressor.basis_file_size(),
-            compression_time.as_secs_f64() * 1000.0
-        );
-        std::fs::write(output_path.as_ref(), basis_file)?;
-        Ok(())
     }
 }
 
@@ -368,6 +276,8 @@ impl TilemapGenerationConfig {
     }
 
     pub fn generate(&self) -> anyhow::Result<()> {
+        use crate::saving::SaveableImage;
+
         let working_dir = self.working_dir();
 
         let (file_paths, prefix) = self.get_file_paths_and_prefix();
@@ -401,28 +311,9 @@ impl TilemapGenerationConfig {
         if Path::new(&atlas_image_path).exists() {
             std::fs::remove_file(&atlas_image_path).expect("Could not remove the old file");
         }
-        match self.format.unwrap_or_default() {
-            SaveImageFormat::Dds => {
-                #[cfg(feature = "dds")]
-                spritesheet.save_as_dds(&atlas_image_path);
-                #[cfg(not(feature = "dds"))]
-                panic!(
-                    "Program is compiled without support for dds. Compile it yourself with feature `dds` enabled."
-                );
-            }
-            SaveImageFormat::Png => {
-                spritesheet
-                    .image_data
-                    .save_with_format(&atlas_image_path, image::ImageFormat::Png)?;
-            }
-            #[cfg(feature = "basis")]
-            SaveImageFormat::Basis => {
-                spritesheet.save_as_basis(&atlas_image_path)?;
-                panic!(
-                    "Program is compiled without support for basis. Compile it yourself with feature `basis` enabled."
-                );
-            }
-        }
+        spritesheet
+            .image_data
+            .save_with_format_autodetection(&atlas_image_path)?;
         let json = serde_json::to_string_pretty(&spritesheet.atlas_asset_json)?;
         let mut file = std::fs::File::create(&atlas_config_path)?;
         file.write_all(json.as_bytes())?;
