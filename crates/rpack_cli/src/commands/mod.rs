@@ -66,6 +66,9 @@ pub enum Commands {
         /// path of the output texture
         #[clap(action)]
         output_path: PathBuf,
+        /// New size of the texture in pixel.
+        #[clap(long)]
+        size: Option<u32>,
     },
 }
 impl Commands {
@@ -109,12 +112,20 @@ impl Commands {
             Commands::Convert {
                 source_path,
                 output_path,
-            } => Self::convert(source_path, output_path),
+                size,
+            } => Self::convert(source_path, output_path, size),
         }
     }
 
-    fn convert(source_path: PathBuf, output_path: PathBuf) -> anyhow::Result<()> {
-        let image = image::open(source_path)?;
+    fn convert(
+        source_path: PathBuf,
+        output_path: PathBuf,
+        new_size: Option<u32>,
+    ) -> anyhow::Result<()> {
+        let mut image = image::open(source_path)?;
+        if let Some(new_size) = new_size {
+            image = image.resize(new_size, new_size, image::imageops::FilterType::Lanczos3);
+        }
         image.save_with_format_autodetection(output_path)?;
         Ok(())
     }
