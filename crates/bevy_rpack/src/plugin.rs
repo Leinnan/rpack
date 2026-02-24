@@ -7,7 +7,7 @@ use bevy_ecs::system::{Res, SystemParam};
 use bevy_image::{Image, ImageSampler, TextureAtlas, TextureAtlasLayout};
 use bevy_math::{URect, UVec2};
 use bevy_platform::collections::HashMap;
-use bevy_reflect::Reflect;
+use bevy_reflect::{Reflect, TypePath};
 use bevy_sprite::Sprite;
 use bevy_ui::widget::ImageNode;
 use thiserror::Error;
@@ -222,7 +222,7 @@ impl Default for RpackAtlasAssetLoaderSettings {
 }
 
 /// The loader responsible for loading `RpackAtlasAsset` files from `.rpack.json` files.
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RpackAtlasAssetLoader;
 
 impl AssetLoader for RpackAtlasAssetLoader {
@@ -281,3 +281,6 @@ impl AssetLoader for RpackAtlasAssetLoader {
         })
     }
 }
+/// The loader responsible for loading `RpackAtlasAsset` files from `.rpack_gen.json` files.
+#[derive(Default)]
+pub struct RpackAtlasGenConfigLoader;

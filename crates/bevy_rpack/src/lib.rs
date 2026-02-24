@@ -10,6 +10,8 @@ use bevy_reflect::Reflect;
 /// Contains the Bevy plugin for handling `Rpack` assets and atlases.
 mod plugin;
 
+mod packer;
+
 /// Re-exports all types for working with texture atlases.
 pub mod prelude {
     #[cfg(feature = "bevy")]
