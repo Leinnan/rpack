@@ -245,7 +245,7 @@ impl AssetLoader for RpackAtlasAssetLoader {
         let asset: AtlasAsset = serde_json::from_str(&file)?;
 
         let path = load_context
-            .asset_path()
+            .path()
             .path()
             .parent()
             .unwrap_or(std::path::Path::new(""))
