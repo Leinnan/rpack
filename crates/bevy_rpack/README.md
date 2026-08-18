@@ -49,7 +49,7 @@ rpack_cli = "0.3"
 ```
 Then in `main.rs` just before `App::new()` add something like this:
 
-```rust
+```rust,ignore
 rpack_cli::TilemapGenerationConfig::read_from_file("example_config.rpack_gen.json")
     .expect("Failed to read config")
     .generate()
@@ -84,7 +84,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 fn atlas_loaded(
-    mut ev_asset: EventReader<AssetEvent<RpackAtlasAsset>>,
+    mut ev_asset: MessageReader<AssetEvent<RpackAtlasAsset>>,
     atlases: RpackAtlases,
     mut commands: Commands,
 ) {

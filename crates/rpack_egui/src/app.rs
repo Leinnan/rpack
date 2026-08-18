@@ -375,7 +375,8 @@ impl eframe::App for Application {
         eframe::set_value(storage, "view_settings", &self.view_settings);
     }
     /// Called each time the UI needs repainting, which may be many times per second.
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         {
             #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
             puffin::profile_scope!("handle_undo");
@@ -467,15 +468,15 @@ impl eframe::App for Application {
             }
             if rebuild {
                 self.rebuild_image_data();
-                self.build_atlas(ctx);
+                self.build_atlas(&ctx);
             }
         }
         if self.show_modal {
             let mut should_close = false;
 
             should_close |= egui::Modal::new("VisualSettings".into())
-                .frame(egui::Frame::menu(&ctx.style()).inner_margin(10.0))
-                .show(ctx, |ui| {
+                .frame(egui::Frame::menu(ui.style()).inner_margin(10.0))
+                .show(&ctx, |ui| {
                     ui.style_mut().interaction.selectable_labels = false;
                     ui.vertical_centered(|ui| {
                         ui.heading("Settings");
@@ -503,9 +504,9 @@ impl eframe::App for Application {
                 self.show_modal = false;
             }
         }
-        egui::TopBottomPanel::top("topPanel")
-            .frame(egui::Frame::canvas(&ctx.style()))
-            .show(ctx, |ui| {
+        egui::Panel::top("topPanel")
+            .frame(egui::Frame::canvas(ui.style()))
+            .show(ui, |ui| {
                 #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("top_panel");
                 // ui.add_space(TOP_SIDE_MARGIN);
@@ -560,7 +561,8 @@ impl eframe::App for Application {
             }
             for file in i.raw.dropped_files.iter() {
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Some(path) = &file.path {
+                {
+                    let path = file.path();
                     if path.is_dir() {
                         let Ok(dir) = path.read_dir() else {
                             continue;
@@ -576,29 +578,37 @@ impl eframe::App for Application {
                                 INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
                             }
                         }
-                    } else {
-                        let Some(path) = &file.path else {
-                            continue;
-                        };
-                        if path.to_string_lossy().ends_with(".rpack_gen.json") {
-                            if let Ok(config) =
-                                rpack_cli::TilemapGenerationConfig::read_from_file(path)
-                            {
-                                INPUT_QUEUE
-                                    .push(AppImageAction::ReadFromConfig(config, path.clone()));
-                                break;
-                            }
+                    } else if path.to_string_lossy().ends_with(".rpack_gen.json") {
+                        if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(path)
+                        {
+                            INPUT_QUEUE
+                                .push(AppImageAction::ReadFromConfig(config, path.to_path_buf()));
+                            break;
                         }
                     }
                 }
+                #[cfg(not(target_arch = "wasm32"))]
                 if let Some(dyn_image) = file.create_image("") {
                     INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
                 }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let name = file.path().to_string_lossy().to_string();
+                    let file = file.clone();
+                    execute(async move {
+                        let Ok(bytes) = file.bytes_async().await else {
+                            return;
+                        };
+                        if let Some(image) = (bytes, name).create_image("") {
+                            INPUT_QUEUE.push(AppImageAction::Add(image));
+                        }
+                    });
+                }
             }
         });
-        egui::TopBottomPanel::bottom("bottom_panel")
-            .frame(egui::Frame::canvas(&ctx.style()))
-            .show(ctx, |ui| {
+        egui::Panel::bottom("bottom_panel")
+            .frame(egui::Frame::canvas(ui.style()))
+            .show(ui, |ui| {
                 #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("bottom_panel");
                 ui.add_space(5.0);
@@ -632,11 +642,12 @@ impl eframe::App for Application {
                 });
                 ui.add_space(5.0);
             });
-        egui::SidePanel::right("right")
-            .min_width(200.0)
-            .max_width(400.0)
-            .frame(egui::Frame::canvas(&ctx.style()).inner_margin(10))
-            .show_animated(ctx, !self.data.image_data.is_empty(), |ui| {
+        let mut show_right_panel = !self.data.image_data.is_empty();
+        egui::Panel::right("right")
+            .min_size(200.0)
+            .max_size(400.0)
+            .frame(egui::Frame::canvas(ui.style()).inner_margin(10))
+            .show_collapsible(ui, &mut show_right_panel, |ui| {
                 ui.with_layout(
                     Layout::top_down(egui::Align::Min).with_cross_justify(true),
                     |ui| {
@@ -820,8 +831,8 @@ impl eframe::App for Application {
                 );
             });
         egui::CentralPanel::default()
-            .frame(Frame::central_panel(&ctx.style()).inner_margin(16i8))
-            .show(ctx, |ui| {
+            .frame(Frame::central_panel(ui.style()).inner_margin(16i8))
+            .show(ui, |ui| {
                 #[cfg(all(not(target_arch = "wasm32"), feature = "profiler"))]
                 puffin::profile_scope!("central_panel");
                 if let Some(error) = &self.last_error {

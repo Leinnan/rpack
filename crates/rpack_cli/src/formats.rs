@@ -33,7 +33,6 @@ impl Display for SaveImageFormat {
         match self {
             SaveImageFormat::Png => f.write_str(".png"),
             SaveImageFormat::Dds => f.write_str(".dds"),
-            #[cfg(feature = "basis")]
             SaveImageFormat::Basis => f.write_str(".basis"),
         }
     }

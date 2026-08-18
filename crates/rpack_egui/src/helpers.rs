@@ -1,7 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
 
-use egui::DroppedFile;
 use image::DynamicImage;
 use rpack_cli::ImageFile;
 use texture_packer::importer::ImageImporter;
@@ -71,17 +70,14 @@ pub fn id_from_path(path: &str) -> String {
     .replace("\\", "/")
 }
 
-impl DroppedFileHelper for DroppedFile {
+#[cfg(not(target_arch = "wasm32"))]
+impl DroppedFileHelper for &egui::DroppedFileHandle {
     fn file_path(&self) -> String {
-        match self.path.as_ref() {
-            Some(path) => path.to_string_lossy().to_string(),
-            None => self.name.clone(),
-        }
+        self.path().to_string_lossy().to_string()
     }
 
     fn dynamic_image(&self) -> Option<DynamicImage> {
-        let bytes = self.bytes.as_ref()?;
-
-        ImageImporter::import_from_memory(bytes).ok()
+        let bytes = self.bytes().ok()?;
+        ImageImporter::import_from_memory(&bytes).ok()
     }
 }

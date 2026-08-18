@@ -14,8 +14,8 @@ profiler = ["dep:puffin", "dep:puffin_http", "dep:profiling"]
 accesskit = ["eframe/accesskit"]
 
 [dependencies]
-egui = "0.33"
-eframe = { version = "0.33", default-features = false, features = [
+egui = "0.36"
+eframe = { version = "0.36", default-features = false, features = [
     "persistence",
     # "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
@@ -23,14 +23,14 @@ eframe = { version = "0.33", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
 ] }
 log = "0.4"
-egui_json_tree = "0.14"
+egui_json_tree = "0.17"
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 texture_packer = { workspace = true }
 image = { workspace = true }
-egui_extras = { version = "0.33", features = ["all_loaders"] }
+egui_extras = { version = "0.36", features = ["all_loaders"] }
 rfd = { version = "0.15", features = [] }
 anyhow = "1"
 crossbeam = "0.8"
@@ -43,11 +43,11 @@ puffin = {version = "0.19", optional = true}
 puffin_http = {version = "0.16", optional = true}
 profiling = {version = "1.0.16", optional = true, default-features = false , features = ["profile-with-puffin"] }
 env_logger = "0.11"
-rpack_cli = { default-features = false, features = ["config_ext"], path = "../rpack_cli", version = "0.3" }
+rpack_cli = { default-features = false, features = ["config_ext"], path = "../rpack_cli", version = "0.4" }
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-rpack_cli = { default-features = false, path = "../rpack_cli", version = "0.3" }
+rpack_cli = { default-features = false, path = "../rpack_cli", version = "0.4" }
 wasm-bindgen-futures = "0.4"
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = [

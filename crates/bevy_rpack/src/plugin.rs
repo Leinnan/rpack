@@ -252,10 +252,8 @@ impl AssetLoader for RpackAtlasAssetLoader {
             .join(asset.filename);
 
         let mut image: Image = load_context
-            .loader()
-            .immediate()
-            .with_unknown_type()
-            .load(path)
+            .load_builder()
+            .load_untyped_value(path)
             .await?
             .take()
             .ok_or(RpackAtlasAssetError::LoadingImageAsset(
@@ -271,8 +269,8 @@ impl AssetLoader for RpackAtlasAssetLoader {
             files.insert(frame.key, id);
         }
 
-        let atlas = load_context.add_labeled_asset("atlas_layout".into(), layout);
-        let image = load_context.add_labeled_asset("atlas_texture".into(), image);
+        let atlas = load_context.add_labeled_asset("atlas_layout", layout);
+        let image = load_context.add_labeled_asset("atlas_texture", image);
 
         Ok(RpackAtlasAsset {
             image,
