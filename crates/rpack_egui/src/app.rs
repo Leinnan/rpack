@@ -225,10 +225,10 @@ impl Application {
         };
         cc.egui_ctx.include_bytes("bytes://image.png", ICON_DATA);
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(config_file) = config_file {
-            if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(&config_file) {
-                app.read_config(config);
-            }
+        if let Some(config_file) = config_file
+            && let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(&config_file)
+        {
+            app.read_config(config);
         }
 
         app
@@ -531,15 +531,15 @@ impl eframe::App for Application {
                             self.read_files();
                         }
                         if self.output.is_ok() {
-                            if ui.add(egui::Button::new("Save atlas image")).clicked() {
-                                if let Err(error) = self.save_atlas() {
-                                    eprintln!("ERROR: {}", error);
-                                }
+                            if ui.add(egui::Button::new("Save atlas image")).clicked()
+                                && let Err(error) = self.save_atlas()
+                            {
+                                eprintln!("ERROR: {}", error);
                             }
-                            if ui.add(egui::Button::new("Save atlas json")).clicked() {
-                                if let Err(error) = self.save_json() {
-                                    eprintln!("ERROR: {}", error);
-                                }
+                            if ui.add(egui::Button::new("Save atlas json")).clicked()
+                                && let Err(error) = self.save_json()
+                            {
+                                eprintln!("ERROR: {}", error);
                             }
                         }
                         if ui.available_width() > 15.0 {
@@ -578,13 +578,12 @@ impl eframe::App for Application {
                                 INPUT_QUEUE.push(AppImageAction::Add(dyn_image));
                             }
                         }
-                    } else if path.to_string_lossy().ends_with(".rpack_gen.json") {
-                        if let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(path)
-                        {
-                            INPUT_QUEUE
-                                .push(AppImageAction::ReadFromConfig(config, path.to_path_buf()));
-                            break;
-                        }
+                    } else if path.to_string_lossy().ends_with(".rpack_gen.json")
+                        && let Ok(config) = rpack_cli::TilemapGenerationConfig::read_from_file(path)
+                    {
+                        INPUT_QUEUE
+                            .push(AppImageAction::ReadFromConfig(config, path.to_path_buf()));
+                        break;
                     }
                 }
                 #[cfg(not(target_arch = "wasm32"))]
@@ -620,21 +619,21 @@ impl eframe::App for Application {
                     }
                     ui.add_space(5.0);
                     ui.add_enabled_ui(self.undoer.has_undo(&self.data), |ui| {
-                        if ui.button("⮪").on_hover_text("Go back").clicked() {
-                            if let Some(action) = self.undoer.undo(&self.data) {
-                                self.data = action.clone();
-                                self.rebuild_image_data();
-                                self.build_atlas(ui.ctx());
-                            }
+                        if ui.button("⮪").on_hover_text("Go back").clicked()
+                            && let Some(action) = self.undoer.undo(&self.data)
+                        {
+                            self.data = action.clone();
+                            self.rebuild_image_data();
+                            self.build_atlas(ui.ctx());
                         }
                     });
                     ui.add_enabled_ui(self.undoer.has_redo(&self.data), |ui| {
-                        if ui.button("⮫").on_hover_text("Redo").clicked() {
-                            if let Some(action) = self.undoer.redo(&self.data) {
-                                self.data = action.clone();
-                                self.rebuild_image_data();
-                                self.build_atlas(ui.ctx());
-                            }
+                        if ui.button("⮫").on_hover_text("Redo").clicked()
+                            && let Some(action) = self.undoer.redo(&self.data)
+                        {
+                            self.data = action.clone();
+                            self.rebuild_image_data();
+                            self.build_atlas(ui.ctx());
                         }
                     });
                     ui.add_space(5.0);
@@ -669,12 +668,11 @@ impl eframe::App for Application {
                                         .text_edit_singleline(&mut self.data.settings.output_path)
                                         .labelled_by(id)
                                         .changed()
+                                        && let SpriteSheetState::Ok(data) = &mut self.output
                                     {
-                                        if let SpriteSheetState::Ok(data) = &mut self.output {
-                                            data.atlas_asset.filename =
-                                                self.data.settings.output_path.clone();
-                                            data.rebuild_json();
-                                        }
+                                        data.atlas_asset.filename =
+                                            self.data.settings.output_path.clone();
+                                        data.rebuild_json();
                                     }
                                     ui.end_row();
                                     ui.label("Output size");
@@ -886,19 +884,16 @@ impl eframe::App for Application {
                                     }
                                     ui.add_space(10.0);
                                     for p in &self.last_editor_paths {
-                                        if ui.add(Button::new(p).frame(false)).clicked() {
-                                            if let Ok(config) =
-                                                rpack_cli::TilemapGenerationConfig::read_from_file(
-                                                    p,
-                                                )
-                                            {
-                                                use std::str::FromStr;
+                                        if ui.add(Button::new(p).frame(false)).clicked()
+                                            && let Ok(config) =
+                                                rpack_cli::TilemapGenerationConfig::read_from_file(p)
+                                        {
+                                            use std::str::FromStr;
 
-                                                INPUT_QUEUE.push(AppImageAction::ReadFromConfig(
-                                                    config,
-                                                    PathBuf::from_str(p).unwrap_or_default(),
-                                                ));
-                                            }
+                                            INPUT_QUEUE.push(AppImageAction::ReadFromConfig(
+                                                config,
+                                                PathBuf::from_str(p).unwrap_or_default(),
+                                            ));
                                         }
                                         ui.add_space(10.0);
                                     }
