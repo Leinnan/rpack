@@ -73,6 +73,7 @@ pub struct Application {
     last_editor_paths: Vec<String>,
     view_settings: ViewSettings,
     show_modal: bool,
+    json_preview: crate::json_preview::JsonPreview,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Default, Clone, PartialEq)]
@@ -117,6 +118,7 @@ impl Default for Application {
             last_editor_paths: Vec::new(),
             view_settings: Default::default(),
             show_modal: false,
+            json_preview: Default::default(),
         }
     }
 }
@@ -236,6 +238,7 @@ impl Application {
 
     fn build_atlas(&mut self, ctx: &egui::Context) {
         self.last_error = None;
+        self.json_preview.invalidate();
         ctx.forget_image("bytes://output.png");
         if self.data.image_data.is_empty() {
             self.output = SpriteSheetState::Empty;
@@ -458,6 +461,7 @@ impl eframe::App for Application {
                                 )
                                 .unwrap();
                             ctx.include_bytes("bytes://output.png", out_vec);
+                            self.json_preview.invalidate();
                             self.output = SpriteSheetState::Ok(spritesheet);
                         }
                         Err(e) => {
@@ -474,7 +478,7 @@ impl eframe::App for Application {
         if self.show_modal {
             let mut should_close = false;
 
-            should_close |= egui::Modal::new("VisualSettings".into())
+            should_close |= egui::Modal::new(ui.make_persistent_id("VisualSettings"))
                 .frame(egui::Frame::menu(ui.style()).inner_margin(10.0))
                 .show(&ctx, |ui| {
                     ui.style_mut().interaction.selectable_labels = false;
@@ -673,6 +677,7 @@ impl eframe::App for Application {
                                         data.atlas_asset.filename =
                                             self.data.settings.output_path.clone();
                                         data.rebuild_json();
+                                        self.json_preview.invalidate();
                                     }
                                     ui.end_row();
                                     ui.label("Output size");
@@ -736,6 +741,7 @@ impl eframe::App for Application {
                                             data.atlas_asset.metadata.skip_serialization =
                                                 skip_metadata;
                                             data.rebuild_json();
+                                            self.json_preview.invalidate();
                                         }
                                     }
                                 });
@@ -929,11 +935,7 @@ impl eframe::App for Application {
                                             .copy_text(data.atlas_asset_json.to_string());
                                     };
                                         ui.add_space(10.0);
-                                        egui_json_tree::JsonTree::new(
-                                            "simple-tree",
-                                            &data.atlas_asset_json,
-                                        )
-                                        .show(ui);
+                                        self.json_preview.show(ui, &data.atlas_asset_json);
                                 });
                                 }
 
@@ -958,7 +960,7 @@ fn powered_by_egui_and_eframe(ui: &mut egui::Ui) {
                 .open_url(egui::OpenUrl::new_tab(env!("CARGO_PKG_HOMEPAGE")));
         }
         ui.separator();
-        egui::widgets::global_theme_preference_switch(ui);
+        egui::widgets::global_theme_preference_buttons(ui);
         ui.separator();
         ui.spacing_mut().item_spacing.x = 0.0;
         ui.hyperlink_to("Mev Lyshkin", "https://www.mevlyshkin.com/");

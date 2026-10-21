@@ -60,6 +60,50 @@ Then on each run of the game it will regenerate the atlas before running the gam
 
 > Disclaimer: It should be used carefully and in most cases be called only in development builds on desktop platforms.
 
+## Generate an atlas while loading
+
+`RpackAssetPlugin` also loads `.rpack_gen.json` files directly into
+`RpackAtlasAsset`. For example, put this config at `assets/ships.rpack_gen.json`:
+
+```json
+{
+  "asset_patterns": ["ships/**/*.png"],
+  "size": 1024,
+  "texture_padding": 2,
+  "border_padding": 1
+}
+```
+
+Load it with `asset_server.load::<RpackAtlasAsset>("ships.rpack_gen.json")`.
+The generated image and layout are available as `#atlas_texture` and
+`#atlas_layout`, just like prebuilt atlases. The default sampler is nearest;
+`RpackAtlasAssetLoaderSettings` can override it.
+
+Paths are relative to the config directory in the same Bevy asset source.
+Absolute paths, parent traversal, source selectors, and asset labels are not
+supported in `asset_patterns`. Globs require an asset reader that supports
+directory enumeration; for sources such as HTTP, use explicit image paths.
+Every matched file must be an image supported by the `image` crate's enabled
+codecs. Overlapping patterns are deduplicated. Matches are sorted before packing.
+Frame keys use paths relative to the matched files' common parent directory,
+with only the final extension removed (for example, `ships/red.v2.png` becomes
+`red.v2` when all files share `ships/`). Duplicate keys cause a loading error.
+
+Size defaults to 2048 (maximum 8192), texture padding to 2, and border padding
+to 0. Rotation and trimming are disabled. The result is an RGBA sRGB atlas.
+CLI configs are accepted, but `output_path`, `format`, and metadata export
+options have no effect; no files are written. Existing CLI paths may need to
+be moved relative to the config's location inside the asset source.
+
+Source bytes are registered as loader dependencies. With Bevy file watching
+enabled, edits to existing source images regenerate the atlas. Newly added
+files matching a glob require reloading the config (for example with
+`asset_server.reload("ships.rpack_gen.json")`). Runtime generation retains
+source pixels while packing and is best suited to development or modest atlases.
+
+Run `cargo run --example generated` with your own `assets/ships.rpack_gen.json`
+and source images to display the first generated frame.
+
 ## Example
 
 ```rust

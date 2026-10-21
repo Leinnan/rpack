@@ -170,6 +170,7 @@ impl Plugin for RpackAssetPlugin {
         app.register_type::<RpackAtlasAsset>();
         app.init_asset::<RpackAtlasAsset>();
         app.init_asset_loader::<RpackAtlasAssetLoader>();
+        app.init_asset_loader::<crate::generation::RpackAtlasGenConfigLoader>();
     }
 }
 
@@ -279,6 +280,3 @@ impl AssetLoader for RpackAtlasAssetLoader {
         })
     }
 }
-/// The loader responsible for loading `RpackAtlasAsset` files from `.rpack_gen.json` files.
-#[derive(Default)]
-pub struct RpackAtlasGenConfigLoader;

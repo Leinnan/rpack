@@ -28,6 +28,7 @@ fn main() {
         let mut icon_dir = ico::IconDir::new(ico::ResourceType::Icon);
         let gen_image_file =
             std::fs::File::open("../../target/icon_128.png").expect("failed to open icon file");
+        let gen_image_file = std::io::BufReader::new(gen_image_file);
         let gen_image =
             ico::IconImage::read_png(gen_image_file).expect("failed to read icon image");
         icon_dir.add_entry(ico::IconDirEntry::encode(&gen_image).unwrap());

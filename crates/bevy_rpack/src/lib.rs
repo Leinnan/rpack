@@ -10,10 +10,17 @@ use bevy_reflect::Reflect;
 /// Contains the Bevy plugin for handling `Rpack` assets and atlases.
 mod plugin;
 
+#[cfg(feature = "bevy")]
+mod generation;
+
 mod packer;
 
 /// Re-exports all types for working with texture atlases.
 pub mod prelude {
+    #[cfg(feature = "bevy")]
+    pub use super::generation::{
+        RpackAtlasGenConfig, RpackAtlasGenConfigLoader, RpackAtlasGenError,
+    };
     #[cfg(feature = "bevy")]
     /// Provides easy access to `Rpack` asset-related functionality in a Bevy application.
     pub use super::plugin::{
