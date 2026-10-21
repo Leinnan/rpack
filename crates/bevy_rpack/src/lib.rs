@@ -13,7 +13,7 @@ mod plugin;
 #[cfg(feature = "bevy")]
 mod generation;
 
-mod packer;
+pub mod packing;
 
 /// Re-exports all types for working with texture atlases.
 pub mod prelude {

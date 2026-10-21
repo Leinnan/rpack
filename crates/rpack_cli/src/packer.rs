@@ -143,14 +143,9 @@ impl SkylinePacker {
         width += self.config.texture_padding + self.config.texture_extrusion * 2;
         height += self.config.texture_padding + self.config.texture_extrusion * 2;
 
-        if let Some((i, mut rect)) = self.find_skyline(width, height) {
+        if let Some((i, rect)) = self.find_skyline(width, height) {
             self.split(i, &rect);
             self.merge();
-
-            // let rotated = width != rect.w;
-
-            rect.w -= self.config.texture_padding + self.config.texture_extrusion * 2;
-            rect.h -= self.config.texture_padding + self.config.texture_extrusion * 2;
 
             Some(())
         } else {

@@ -10,10 +10,8 @@ use egui::{Checkbox, Grid, Vec2};
 use egui_extras::{Column, TableBuilder};
 use once_cell::sync::Lazy;
 use rpack_cli::TilemapGenerationConfig;
-use rpack_cli::{
-    ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError, packer::SkylinePacker,
-};
-use texture_packer::{Rect, TexturePackerConfig};
+use rpack_cli::{ImageFile, Spritesheet, SpritesheetBuildConfig, SpritesheetError};
+use texture_packer::TexturePackerConfig;
 static INPUT_QUEUE: Lazy<SegQueue<AppImageAction>> = Lazy::new(SegQueue::new);
 pub const MY_ACCENT_COLOR32: Color32 = Color32::from_rgb(230, 102, 1);
 pub const GIT_HASH: &str = env!("GIT_HASH");
@@ -100,11 +98,8 @@ impl AppImageData {
     }
 
     pub fn update_id(&mut self, prefix: &str) {
-        self.data.id = self
-            .path
-            .strip_prefix(prefix)
-            .unwrap_or(&self.path)
-            .to_owned();
+        let path = self.path.replace('\\', "/");
+        self.data.id = rpack_cli::packing::frame_key(path.strip_prefix(prefix).unwrap_or(&path));
     }
 }
 
@@ -154,48 +149,37 @@ impl Application {
         self.update_min_size();
     }
     pub fn update_min_size(&mut self) {
-        self.data.min_size = self
+        self.data.min_size = 0;
+        if self.data.image_data.is_empty() {
+            self.data.min_size = 32;
+            return;
+        }
+        let config: TexturePackerConfig = (&self.data.settings).into();
+        let dimensions: Vec<_> = self
             .data
             .image_data
             .iter()
-            .max_by(|a, b| a.width.cmp(&b.width))
-            .map_or(32, |s| s.width)
-            .max(
-                self.data
-                    .image_data
-                    .iter()
-                    .max_by(|a, b| a.height.cmp(&b.height))
-                    .map_or(32, |s| s.height),
-            );
-        let config: TexturePackerConfig = (&self.data.settings).into();
-        for nr in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
-            if nr < self.data.min_size {
-                continue;
-            }
-            let mut packer = SkylinePacker::new(TexturePackerConfig {
-                max_width: nr,
-                max_height: nr,
-                ..config
-            });
-            let mut success = true;
-            for image in &self.data.image_data {
-                let data = Rect {
-                    x: 0,
-                    y: 0,
-                    w: image.width,
-                    h: image.height,
-                };
-                if !packer.can_pack(&data) || packer.pack(&data).is_none() {
-                    success = false;
-                    break;
+            .map(|image| (image.data.id.as_str(), image.width, image.height))
+            .collect();
+        for size in [32, 64, 128, 256, 512, 1024, 2048, 4096] {
+            match rpack_cli::packing::place(
+                TexturePackerConfig {
+                    max_width: size,
+                    max_height: size,
+                    ..config
+                },
+                &dimensions,
+            ) {
+                Ok(_) => {
+                    self.data.min_size = size;
+                    self.last_error = None;
+                    return;
                 }
-            }
-            if success && nr >= self.data.min_size {
-                self.data.min_size = nr;
-                break;
+                Err(error) => self.last_error = Some(error.into()),
             }
         }
     }
+
     /// Called once before the first frame.
     #[allow(dead_code, unused_variables, unused_mut)]
     pub fn new(cc: &eframe::CreationContext<'_>, config_file: Option<String>) -> Self {
@@ -244,6 +228,12 @@ impl Application {
             self.output = SpriteSheetState::Empty;
             return;
         }
+        self.update_min_size();
+        if self.data.min_size == 0 {
+            self.output = SpriteSheetState::Empty;
+            return;
+        }
+        self.last_error = None;
         self.output = SpriteSheetState::Building;
         let mut packer_config: TexturePackerConfig = (&self.data.settings).into();
         if packer_config.max_height < self.data.min_size {
@@ -984,5 +974,39 @@ fn slider_field(
         true
     } else {
         false
+    }
+}
+
+#[cfg(test)]
+mod packing_tests {
+    use super::*;
+
+    fn image(width: u32, height: u32) -> AppImageData {
+        AppImageData {
+            width,
+            height,
+            data: ImageFile {
+                id: "tile".into(),
+                image: image::DynamicImage::new_rgba8(width, height),
+            },
+            path: "tiles/tile.png".into(),
+        }
+    }
+
+    #[test]
+    fn minimum_size_matches_builder_and_reports_exhaustion() {
+        let mut app = Application::default();
+        app.data.settings.border_padding = Some(1);
+        app.data.image_data = vec![image(30, 30)];
+        app.update_min_size();
+        assert_eq!(app.data.min_size, 32);
+        let config = rpack_cli::packing::generation_config(Some(32), None, Some(1)).unwrap();
+        assert!(
+            Spritesheet::build(config, &[app.data.image_data[0].data.clone()], "atlas.png").is_ok()
+        );
+        app.data.image_data = vec![image(4096, 1)];
+        app.update_min_size();
+        assert_eq!(app.data.min_size, 0);
+        assert!(app.last_error.is_some());
     }
 }

@@ -14,7 +14,7 @@ pub trait DroppedFileHelper {
         P: AsRef<str>,
     {
         let path = self.file_path();
-        let base_id = id_from_path(&path);
+        let base_id = rpack_cli::packing::frame_key(&path);
 
         let id = base_id
             .strip_prefix(prefix.as_ref())
@@ -60,14 +60,6 @@ impl DroppedFileHelper for PathBuf {
     fn dynamic_image(&self) -> Option<DynamicImage> {
         ImageImporter::import_from_file(self.as_path()).ok()
     }
-}
-
-pub fn id_from_path(path: &str) -> String {
-    match path.rfind('.') {
-        Some(index) => path[..index].to_string(),
-        None => path.to_string(),
-    }
-    .replace("\\", "/")
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -159,3 +159,17 @@ Bevy version | Crate version
 0.17 | 0.3
 0.16 | 0.2
 0.15 | 0.1
+
+### Shared packing without Bevy
+
+`bevy_rpack::packing` is available with `default-features = false`. Use
+`generation_config` to resolve validated generation settings, `build` for keyed
+borrowed images, or `place` for dimension-only fit checks. Placement preserves
+input order; built frame metadata is sorted by key. Both CLI generation and the
+runtime loader use this implementation. File discovery, serialization, image
+encoding, and Bevy asset registration remain in their respective adapters.
+
+Generation configs support sizes 1–8192 with valid border and texture padding.
+The raw builder also accepts larger dimensions and advanced `TexturePackerConfig`
+options through the upstream exporter. Source-derived keys preserve dots except
+for the final filename extension, and duplicate keys are errors.

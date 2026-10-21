@@ -262,13 +262,7 @@ impl AssetLoader for RpackAtlasAssetLoader {
             ))?;
         image.sampler = settings.image_sampler.clone();
 
-        let mut layout = TextureAtlasLayout::new_empty(UVec2::new(asset.size[0], asset.size[1]));
-        let mut files = HashMap::new();
-
-        for frame in asset.frames {
-            let id = layout.add_texture(frame.frame.into());
-            files.insert(frame.key, id);
-        }
+        let (layout, files) = atlas_layout(asset.size, asset.frames);
 
         let atlas = load_context.add_labeled_asset("atlas_layout", layout);
         let image = load_context.add_labeled_asset("atlas_texture", image);
@@ -279,4 +273,18 @@ impl AssetLoader for RpackAtlasAssetLoader {
             files,
         })
     }
+}
+
+/// Convert frames in their existing order so serialized indices remain stable.
+pub(crate) fn atlas_layout(
+    size: [u32; 2],
+    frames: Vec<crate::AtlasFrame>,
+) -> (TextureAtlasLayout, HashMap<String, usize>) {
+    let mut layout = TextureAtlasLayout::new_empty(UVec2::new(size[0], size[1]));
+    let mut files = HashMap::new();
+    for frame in frames {
+        let index = layout.add_texture(frame.frame.into());
+        files.insert(frame.key, index);
+    }
+    (layout, files)
 }

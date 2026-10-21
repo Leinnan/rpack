@@ -7,12 +7,13 @@ use std::{
 use bevy_asset::{AssetLoader, AssetPath, AssetServer, AssetServerMode, AsyncReadExt, LoadContext};
 use bevy_ecs::world::{FromWorld, World};
 use bevy_image::{Image, TextureAtlasLayout};
-use bevy_math::{URect, UVec2};
+#[cfg(test)]
+use bevy_math::URect;
 use bevy_platform::collections::HashMap;
 use bevy_reflect::TypePath;
 use futures_lite::StreamExt;
-use image::{DynamicImage, GenericImage};
-use texture_packer::{TexturePacker, TexturePackerConfig};
+use image::DynamicImage;
+use texture_packer::TexturePackerConfig;
 use thiserror::Error;
 
 use crate::plugin::{RpackAtlasAsset, RpackAtlasAssetLoaderSettings};
@@ -80,28 +81,8 @@ impl FromWorld for RpackAtlasGenConfigLoader {
 
 impl RpackAtlasGenConfig {
     fn packer_config(&self) -> Result<TexturePackerConfig, RpackAtlasGenError> {
-        let size = self.size.unwrap_or(2048);
-        let padding = self.texture_padding.unwrap_or(2);
-        let border = self.border_padding.unwrap_or(0);
-        // Bound output allocations to a practical 256 MiB maximum atlas.
-        if size == 0
-            || size > 8192
-            || border.checked_mul(2).is_none_or(|b| b >= size)
-            || padding >= size
-        {
-            return Err(RpackAtlasGenError::Config("size must be 1..=8192, twice border_padding must be less than size, and texture_padding must be less than size".into()));
-        }
-        Ok(TexturePackerConfig {
-            max_width: size,
-            max_height: size,
-            allow_rotation: false,
-            force_max_dimensions: true,
-            border_padding: border,
-            texture_padding: padding,
-            texture_extrusion: 0,
-            trim: false,
-            texture_outlines: false,
-        })
+        crate::packing::generation_config(self.size, self.texture_padding, self.border_padding)
+            .map_err(Into::into)
     }
 }
 
@@ -126,88 +107,36 @@ fn relative_pattern(value: &str) -> Result<PathBuf, RpackAtlasGenError> {
     Ok(path.components().collect())
 }
 
-fn frame_keys(paths: &[PathBuf]) -> Result<Vec<String>, RpackAtlasGenError> {
-    let mut common = paths[0].parent().unwrap_or(Path::new("")).to_path_buf();
-    for path in paths {
-        while !path.starts_with(&common) {
-            common.pop();
+impl From<crate::packing::PackingError> for RpackAtlasGenError {
+    fn from(error: crate::packing::PackingError) -> Self {
+        use crate::packing::PackingError;
+        match error {
+            PackingError::Config(message) => Self::Config(message),
+            PackingError::DuplicateKey(key) => Self::DuplicateKey(key),
+            PackingError::Packing(key) => Self::Packing(key),
+            PackingError::Export(message) => Self::Export(message),
         }
     }
-    let mut seen = BTreeSet::new();
-    paths
-        .iter()
-        .map(|path| {
-            let key = path
-                .strip_prefix(&common)
-                .unwrap()
-                .with_extension("")
-                .to_string_lossy()
-                .replace('\\', "/");
-            if !seen.insert(key.clone()) {
-                return Err(RpackAtlasGenError::DuplicateKey(key));
-            }
-            Ok(key)
-        })
-        .collect()
+}
+
+fn frame_keys(paths: &[PathBuf]) -> Result<Vec<String>, RpackAtlasGenError> {
+    crate::packing::frame_keys(paths).map_err(Into::into)
 }
 
 fn build_atlas(
     config: TexturePackerConfig,
     images: &[(String, DynamicImage)],
 ) -> Result<(DynamicImage, TextureAtlasLayout, HashMap<String, usize>), RpackAtlasGenError> {
-    // Reserve the border ourselves. The skyline implementation requires one
-    // unused bottom row; trailing inter-frame padding need not fit in the image.
-    let usable = config.max_width - 2 * config.border_padding;
-    let mut packer = TexturePacker::new_skyline(TexturePackerConfig {
-        max_width: usable + config.texture_padding,
-        max_height: usable + config.texture_padding + 1,
-        border_padding: 0,
-        ..config
-    });
-    for (key, image) in images {
-        if image.width() == 0
-            || image.height() == 0
-            || image.width() > config.max_width
-            || image.height() > config.max_height
-        {
-            return Err(RpackAtlasGenError::Packing(key.clone()));
-        }
-        packer
-            .pack_ref(key.clone(), image)
-            .map_err(|_| RpackAtlasGenError::Packing(key.clone()))?;
-    }
-    let mut pixels = DynamicImage::new_rgba8(config.max_width, config.max_height);
-    for (key, image) in images {
-        let r = packer
-            .get_frame(key)
-            .ok_or_else(|| RpackAtlasGenError::Packing(key.clone()))?
-            .frame;
-        if r.x + r.w > usable || r.y + r.h > usable {
-            return Err(RpackAtlasGenError::Packing(key.clone()));
-        }
-        pixels
-            .copy_from(
-                image,
-                r.x + config.border_padding,
-                r.y + config.border_padding,
-            )
-            .map_err(|e| RpackAtlasGenError::Export(e.to_string()))?;
-    }
-    let mut layout = TextureAtlasLayout::new_empty(UVec2::new(pixels.width(), pixels.height()));
-    let mut files = HashMap::new();
-    let mut frames: Vec<_> = packer.get_frames().values().collect();
-    frames.sort_by(|a, b| a.key.cmp(&b.key));
-    for frame in frames {
-        let mut r = frame.frame;
-        r.x += config.border_padding;
-        r.y += config.border_padding;
-        let index = layout.add_texture(URect::from_corners(
-            UVec2::new(r.x, r.y),
-            UVec2::new(r.x + r.w, r.y + r.h),
-        ));
-        files.insert(frame.key.clone(), index);
-    }
-    Ok((pixels, layout, files))
+    let images: Vec<_> = images
+        .iter()
+        .map(|(key, image)| (key.as_str(), image))
+        .collect();
+    let packed = crate::packing::build(config, &images)?;
+    let (layout, files) = crate::plugin::atlas_layout(
+        [packed.pixels.width(), packed.pixels.height()],
+        packed.frames,
+    );
+    Ok((packed.pixels, layout, files))
 }
 
 impl AssetLoader for RpackAtlasGenConfigLoader {
@@ -410,6 +339,20 @@ mod tests {
             ("a".into(), solid(2, 2, [255, 0, 0, 255])),
         ];
         let (pixels, layout, files) = build_atlas(config, &images).unwrap();
+        let packed = crate::packing::build(
+            config,
+            &images
+                .iter()
+                .map(|(key, image)| (key.as_str(), image))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        assert_eq!(pixels, packed.pixels);
+        for (index, frame) in packed.frames.iter().enumerate() {
+            assert_eq!(files[&frame.key], index);
+            assert_eq!(layout.textures[index], frame.frame.into());
+        }
+
         let (again, other, _) = build_atlas(config, &images).unwrap();
         assert_eq!(pixels, again);
         assert_eq!(layout.textures, other.textures);
