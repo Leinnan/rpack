@@ -35,6 +35,7 @@ rfd = { version = "0.17.2", features = [] }
 anyhow = "1"
 crossbeam = "0.8"
 once_cell = "1"
+egui_material_icons = "0.9.0"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -43,6 +44,8 @@ puffin = {version = "0.20", optional = true}
 puffin_http = {version = "0.17", optional = true}
 profiling = {version = "1.0.18", optional = true, default-features = false , features = ["profile-with-puffin"] }
 env_logger = "0.11"
+# Screen reader support (adds platform accessibility dependencies, native only).
+eframe = { version = "0.37", default-features = false, features = ["accesskit"] }
 rpack_cli = { default-features = false, features = ["config_ext"], path = "../rpack_cli", version = "0.6" }
 
 # web:
@@ -69,5 +72,5 @@ icon = ["static/base_icon.png"]
 resources_mapping = [["static/JetBrains*","./"]]
 identifier = "com.mevlyshkin.rpack"
 osx_url_schemes = ["com.mevlyshkin.rpack"]
-short_description = "Tilemap Editor"
-long_description = "Tilemap Editor built with egui in Rust"
+short_description = "Sprite atlas packer"
+long_description = "Sprite atlas packer built with egui in Rust"

@@ -39,9 +39,9 @@ fn main() -> eframe::Result<()> {
     };
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 300.0])
+            .with_inner_size([1100.0, 720.0])
             .with_icon(eframe::icon_data::from_png_bytes(rpack_egui::ICON_DATA).unwrap_or_default())
-            .with_min_inner_size([400.0, 300.0]),
+            .with_min_inner_size([640.0, 420.0]),
         ..Default::default()
     };
     eframe::run_native(

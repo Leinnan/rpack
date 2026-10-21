@@ -34,7 +34,23 @@ pub fn load_fonts(ctx: &egui::Context) {
             .push("regular".to_owned());
         // Tell egui to use these fonts:
         ctx.set_fonts(fonts);
+    } else {
+        register_semibold_fallback(ctx);
     }
+}
+
+/// Makes the `semibold` family resolvable (as the default proportional font) when no custom font was found.
+pub fn register_semibold_fallback(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    let proportional = fonts
+        .families
+        .get(&egui::FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default();
+    fonts
+        .families
+        .insert(egui::FontFamily::Name("semibold".into()), proportional);
+    ctx.set_fonts(fonts);
 }
 
 #[cfg(not(target_arch = "wasm32"))]

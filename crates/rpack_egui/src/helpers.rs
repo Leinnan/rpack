@@ -2,10 +2,12 @@
 use std::path::PathBuf;
 
 use image::DynamicImage;
-use rpack_cli::ImageFile;
 use texture_packer::importer::ImageImporter;
 
 use crate::app::AppImageData;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub const IMAGE_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "dds"];
 
 pub trait DroppedFileHelper {
     fn file_path(&self) -> String;
@@ -21,25 +23,9 @@ pub trait DroppedFileHelper {
             .unwrap_or(&base_id)
             .to_owned();
 
-        let image: DynamicImage = self.dynamic_image()?;
-        Some(AppImageData {
-            width: image.width(),
-            height: image.height(),
-            data: ImageFile { id, image },
-            path,
-        })
+        Some(AppImageData::new(path, id, self.dynamic_image()?))
     }
     fn dynamic_image(&self) -> Option<DynamicImage>;
-}
-#[cfg(not(target_arch = "wasm32"))]
-impl DroppedFileHelper for std::fs::DirEntry {
-    fn file_path(&self) -> String {
-        self.path().to_string_lossy().to_string()
-    }
-
-    fn dynamic_image(&self) -> Option<DynamicImage> {
-        ImageImporter::import_from_file(&self.path()).ok()
-    }
 }
 
 impl DroppedFileHelper for (Vec<u8>, String) {
@@ -59,17 +45,5 @@ impl DroppedFileHelper for PathBuf {
 
     fn dynamic_image(&self) -> Option<DynamicImage> {
         ImageImporter::import_from_file(self.as_path()).ok()
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl DroppedFileHelper for &egui::DroppedFileHandle {
-    fn file_path(&self) -> String {
-        self.path().to_string_lossy().to_string()
-    }
-
-    fn dynamic_image(&self) -> Option<DynamicImage> {
-        let bytes = self.bytes().ok()?;
-        ImageImporter::import_from_memory(&bytes).ok()
     }
 }

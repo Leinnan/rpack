@@ -1,16 +1,20 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ViewSettings {
-    pub preview_max_size: f32,
     pub display_json: bool,
+    pub show_outlines: bool,
+    /// Multiplier of the default egui text sizes.
+    pub ui_scale: f32,
 }
 
 impl Default for ViewSettings {
     fn default() -> Self {
         Self {
-            preview_max_size: 512.0,
             display_json: true,
+            show_outlines: false,
+            ui_scale: 1.4,
         }
     }
 }

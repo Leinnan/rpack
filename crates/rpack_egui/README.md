@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/rpack_egui)](https://crates.io/crates/rpack_egui)
 [![Documentation](https://docs.rs/rpack_egui/badge.svg)](https://docs.rs/rpack_egui)
 
-A both desktop and web frontend for generating tilemaps. Just drag and drop images into the program and generate tilemaps.
+A both desktop and web frontend for generating sprite atlases. Just drag and drop images or a folder into the program and save the atlas.
 
 To open it in browser click one of the icons below:
 
