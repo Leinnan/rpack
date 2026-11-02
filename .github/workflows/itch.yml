@@ -33,15 +33,10 @@ jobs:
       - name: Download and install Trunk binary
         working-directory: crates/rpack_egui
         run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
-      - name: Update file
-        working-directory: crates/rpack_egui
-        run: sed -i '15d' index.html
       - name: Build
         working-directory: crates/rpack_egui
-        run: ./trunk build --release
-      - name: Update result file
-        working-directory: crates/rpack_egui
-        run: sed -i 's|/rpack|./rpack|g' dist/index.html
+        # itch.io serves uploads from a nested path, so all urls have to be relative.
+        run: ./trunk build --release --public-url ./
       - name: Itch.io - Publish
         uses: KikimoraGames/itch-publish@v0.0.3
         with:
