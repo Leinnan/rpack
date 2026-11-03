@@ -25,19 +25,19 @@ pub trait SaveableImage {
                         .save_with_format(output_path, image::ImageFormat::Png)?;
                 }
                 SaveImageFormat::Basis => {
-                    #[cfg(feature = "basis")]
+                    #[cfg(all(feature = "basis", not(target_arch = "wasm32")))]
                     self.save_as_basis(&output_path)?;
-                    #[cfg(not(feature = "basis"))]
+                    #[cfg(not(all(feature = "basis", not(target_arch = "wasm32"))))]
                     anyhow::bail!(
                         "Program is compiled without support for basis. Compile it yourself with feature `basis` enabled."
                     );
                 }
                 SaveImageFormat::Dds => {
-                    #[cfg(feature = "dds")]
+                    #[cfg(all(feature = "dds", not(target_arch = "wasm32")))]
                     self.save_as_dds(&output_path)?;
-                    #[cfg(not(feature = "basis"))]
+                    #[cfg(not(all(feature = "dds", not(target_arch = "wasm32"))))]
                     anyhow::bail!(
-                        "Program is compiled without support for basis. Compile it yourself with feature `basis` enabled."
+                        "Program is compiled without support for dds. Compile it yourself with feature `dds` enabled."
                     );
                 }
             },

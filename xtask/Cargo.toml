@@ -1,0 +1,15 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# `icons` renders the app icon SVGs to PNG and ICO.
+ico = "0.6"
+png = "0.17"
+resvg = { version = "0.48", default-features = false }
+# `icons-subset` cuts the bundled Lucide font down to the icons in use.
+lucide-icons = "1.66"
+subsetter = "0.2"
+ttf-parser = { version = "0.25", default-features = false, features = ["std"] }

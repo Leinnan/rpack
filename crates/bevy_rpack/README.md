@@ -45,11 +45,13 @@ It can be useful for building special version of the game for artists in the tea
 
 In order to achieve that add this dependency to the project:
 ```toml
-rpack_cli = "0.3"
+rpack_cli = "0.7"
 ```
 Then in `main.rs` just before `App::new()` add something like this:
 
 ```rust,ignore
+use rpack_cli::GenerateAtlas;
+
 rpack_cli::TilemapGenerationConfig::read_from_file("example_config.rpack_gen.json")
     .expect("Failed to read config")
     .generate()

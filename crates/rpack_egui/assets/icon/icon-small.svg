@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- rPack app icon for 32px and below: fewer, larger pieces, flat colors, no shadows,
+       and a tile that fills the canvas, so it stays readable as a favicon. -->
+  <rect x="32" y="32" width="960" height="960" rx="200" fill="#26262a"/>
+  <rect x="176" y="176" width="400" height="400" rx="48" fill="#f07a14"/>
+  <rect x="640" y="176" width="208" height="400" rx="40" fill="#f4efe6"/>
+  <rect x="176" y="640" width="208" height="208" rx="40" fill="#ffc24b"/>
+  <rect x="448" y="640" width="400" height="208" rx="40" fill="#8a919d"/>
+</svg>

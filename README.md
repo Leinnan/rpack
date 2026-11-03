@@ -5,6 +5,13 @@ Create tilemaps in seconds!
 
 This repository contains few projects that together make a fully functional solution for generating tilemaps alongside integration to the Bevy game engine.
 
+## rPack core
+
+[![Crates.io](https://img.shields.io/crates/v/rpack_core)](https://crates.io/crates/rpack_core)
+[![Documentation](https://docs.rs/rpack_core/badge.svg)](https://docs.rs/rpack_core)
+
+Atlas packing, configuration and data types shared by the other crates. It has no UI dependencies, and depends on Bevy only through an optional feature.
+
 ## Bevy rPack
 
 [![Crates.io](https://img.shields.io/crates/v/bevy_rpack)](https://crates.io/crates/bevy_rpack)
@@ -12,7 +19,7 @@ This repository contains few projects that together make a fully functional solu
 
 A Bevy plugin with support for the `rpack.json` atlases.
 
-More info available at [crates/bevy_rpack](https://github.com/Leinnan/rpack/tree/master/crates/bevy_rpack).
+More info available at [crates/bevy_rpack](https://github.com/Leinnan/rpack/tree/main/crates/bevy_rpack).
 
 Repository contains example how to use plugin in Bevy.
 
@@ -32,6 +39,7 @@ Commands:
   generate              Generates a tilemap
   config-create         Creates a tilemap generation config
   generate-from-config  Generates a tilemap from config
+  convert               Converts a texture between formats
   help                  Print this message or the help of the given subcommand(s)
 
 Options:
@@ -42,7 +50,7 @@ Options:
           Print version
 ```
 
-Available at [crates/rpack_cli](https://github.com/Leinnan/rpack/tree/master/crates/rpack_cli).
+Available at [crates/rpack_cli](https://github.com/Leinnan/rpack/tree/main/crates/rpack_cli).
 
 ### Installation
 
@@ -63,10 +71,10 @@ To open it in browser click one of the icons below:
 [![Itch.io](https://img.shields.io/badge/Itch-%23FF0B34.svg?style=for-the-badge&logo=Itch.io&logoColor=white)](https://mevlyshkin.itch.io/rpack)
 [![Github Pages](https://img.shields.io/badge/github%20pages-121013?style=for-the-badge&logo=github&logoColor=white)](http://rpack.mevlyshkin.com/)
 
-<img width="1103" height="754" alt="Rpack EGUI 0.3.0" src="https://github.com/user-attachments/assets/f9fa09b0-8634-43f8-91a2-2031c5ae6026" />
+![rPack egui with a packed atlas](docs/media/screenshot-atlas.png)
 
 
-Available at [crates/rpack_egui](https://github.com/Leinnan/rpack/tree/master/crates/rpack_egui).
+Available at [crates/rpack_egui](https://github.com/Leinnan/rpack/tree/main/crates/rpack_egui).
 
 
 ## Used formats
@@ -86,6 +94,7 @@ Fields:
   - `w`- image width
   - `x`- x start pos of the image in the tilemap
   - `y`- y start pos of the image in the tilemap
+- `metadata`: optional, the program and format version that generated the tilemap, kept in case of future breaking changes
 
 Example:
 
@@ -114,7 +123,7 @@ Example:
   ],
   "metadata": {
     "app": "rpack",
-    "app_version": "0.3.0",
+    "app_version": "0.7.0",
     "format_version": 1
   },
   "size": [
@@ -132,11 +141,11 @@ Fields:
 
 - `output_path`: string- path relative to the config, without extension, this is where tilemap image and `.rpack.json` config file are going to be saved
 - `asset_patterns`: array of strings- search patterns for images to be included, relative paths to the config
-- `format`: optional(defaults to `Png`), format of the tilemap image, currently supported values: `Png`, `Dds`
+- `format`: optional(defaults to `Png`), format of the tilemap image, currently supported values: `Png`, `Dds`, `Basis`
 - `size`: optional(defaults to `2048`), size of the tilemap image
 - `texture_padding`: optional(defaults to `2`), size of the padding between frames in pixel
 - `border_padding`: optional(defaults to `0`), size of the padding on the outer edge of the packed image in pixel
-- `metadata`: optional, struct containing metadata about the program used to generate the tilemap and version number, stored for the future in case of future breaking changes
+- `skip_serializing_metadata`: optional(defaults to `false`), leaves the `metadata` section out of the generated `.rpack.json`
 
 Example:
 
@@ -153,10 +162,6 @@ Example:
   "format": "Png",
   "size": 512,
   "texture_padding": 2,
-  "border_padding": 2,
-  "size": [
-    512,
-    512
-  ]
+  "border_padding": 2
 }
 ```

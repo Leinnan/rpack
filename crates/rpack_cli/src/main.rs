@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use clap::Parser;
-use rpack_cli::TilemapGenerationConfig;
+use rpack_cli::{GenerateAtlas, TilemapGenerationConfig};
 
 pub mod commands;
 

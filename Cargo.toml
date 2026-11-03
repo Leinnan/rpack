@@ -1,9 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/rpack_core",
     "crates/bevy_rpack",
     "crates/rpack_egui",
     "crates/rpack_cli",
+    "xtask",
 ]
 
 [profile.release]

@@ -1,7 +1,13 @@
-use egui::{
-    Color32, Pos2, Rect, Sense, Stroke, StrokeKind, TextureOptions, Ui, UiBuilder, Vec2, vec2,
+use super::start_screen;
+use super::theme::colors::{
+    ACCENT, CANVAS_SHADOW, CHECKER_ALT, CHECKER_BASE, DELETE_RED_SOFT, PANEL_BG,
 };
-use rpack_cli::Spritesheet;
+use crate::state::AppState;
+use egui::{
+    Frame, Margin, Pos2, Rect, RichText, Sense, Shadow, Stroke, StrokeKind, TextureOptions, Ui,
+    UiBuilder, Vec2, vec2,
+};
+use rpack_core::Spritesheet;
 use std::collections::HashSet;
 
 pub const PREVIEW_URI: &str = "bytes://output.png";
@@ -40,6 +46,11 @@ impl PreviewState {
         self.offset = Vec2::ZERO;
     }
 
+    pub fn set_zoom(&mut self, percent: u16) {
+        self.fit = false;
+        self.zoom = (f32::from(percent) / 100.0).clamp(MIN_ZOOM, MAX_ZOOM);
+    }
+
     pub fn zoom_percent(&self) -> u32 {
         (self.zoom * 100.0).round() as u32
     }
@@ -53,11 +64,7 @@ fn fit_zoom(viewport: Vec2, atlas: Vec2) -> f32 {
 }
 
 fn paint_checkerboard(ui: &Ui, visible: Rect, origin: Pos2) {
-    let (base, alt) = if ui.visuals().dark_mode {
-        (Color32::from_gray(48), Color32::from_gray(64))
-    } else {
-        (Color32::from_gray(205), Color32::from_gray(232))
-    };
+    let (base, alt) = (CHECKER_BASE, CHECKER_ALT);
     let painter = ui.painter();
     painter.rect_filled(visible, 0.0, base);
     let first_x = ((visible.min.x - origin.x) / CHECKER_CELL).floor() as i32;
@@ -80,15 +87,55 @@ fn paint_checkerboard(ui: &Ui, visible: Rect, origin: Pos2) {
     }
 }
 
+/// The atlas, or the start screen and any error instead of it.
+pub fn show_panel(ui: &mut Ui, state: &mut AppState) {
+    profile_scope!("preview_panel");
+    egui::CentralPanel::default()
+        .frame(Frame::new().fill(PANEL_BG))
+        .show(ui, |ui| {
+            if let Some(error) = &state.build.last_error {
+                Frame::new().inner_margin(Margin::same(10)).show(ui, |ui| {
+                    ui.label(RichText::new(error.to_string()).color(DELETE_RED_SOFT));
+                });
+            }
+            if state.project.image_data.is_empty() {
+                start_screen::show(ui, state);
+                return;
+            }
+            if let Some(built) = &state.build.output {
+                let selected_keys: HashSet<&str> = state
+                    .project
+                    .image_data
+                    .iter()
+                    .filter(|image| state.ui.selected.contains(&image.path))
+                    .map(|image| image.id())
+                    .collect();
+                let hovered = show(
+                    ui,
+                    &mut state.ui.preview,
+                    built,
+                    state.ui.settings.show_outlines,
+                    state.build.building,
+                    &selected_keys,
+                );
+                if hovered != state.ui.hovered_frame {
+                    state.ui.hovered_frame = hovered;
+                    ui.ctx().request_repaint();
+                }
+            } else if state.build.building {
+                ui.centered_and_justified(|ui| ui.spinner());
+            }
+        });
+}
+
 /// Draws the atlas with scroll-to-zoom, drag-to-pan and sprite outlines.
 /// `building` dims the preview while a new atlas is being packed.
-pub fn show(
+fn show(
     ui: &mut Ui,
     state: &mut PreviewState,
     sheet: &Spritesheet,
     show_outlines: bool,
     building: bool,
-    accent: Color32,
     selected_keys: &HashSet<&str>,
 ) -> Option<String> {
     let atlas_size = vec2(
@@ -132,9 +179,15 @@ pub fn show(
     let image_rect = Rect::from_center_size(rect.center() + state.offset, atlas_size * state.zoom);
     let mut canvas = ui.new_child(UiBuilder::new().max_rect(rect));
     canvas.shrink_clip_rect(rect);
-    canvas
-        .painter()
-        .rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+    canvas.painter().add(
+        Shadow {
+            offset: [0, 2],
+            blur: 12,
+            spread: 0,
+            color: CANVAS_SHADOW,
+        }
+        .as_shape(image_rect, 0.0),
+    );
     let visible = image_rect.intersect(rect);
     if visible.is_positive() {
         paint_checkerboard(&canvas, visible, image_rect.min);
@@ -155,7 +208,7 @@ pub fn show(
         )
     };
     if show_outlines {
-        let stroke = Stroke::new(1.0, accent.gamma_multiply(0.6));
+        let stroke = Stroke::new(1.0, ACCENT.gamma_multiply(0.6));
         for frame in &sheet.atlas_asset.frames {
             let r = &frame.frame;
             canvas.painter().rect_stroke(
@@ -166,18 +219,18 @@ pub fn show(
             );
         }
     }
-    if show_outlines && !selected_keys.is_empty() {
+    if !selected_keys.is_empty() {
         for frame in &sheet.atlas_asset.frames {
             if selected_keys.contains(frame.key.as_str()) {
                 let r = &frame.frame;
                 let frame_rect = to_screen(r.x, r.y, r.w, r.h);
                 canvas
                     .painter()
-                    .rect_filled(frame_rect, 0.0, accent.gamma_multiply(0.25));
+                    .rect_filled(frame_rect, 0.0, ACCENT.gamma_multiply(0.25));
                 canvas.painter().rect_stroke(
                     frame_rect,
                     0.0,
-                    Stroke::new(2.0, accent),
+                    Stroke::new(2.0, ACCENT),
                     StrokeKind::Inside,
                 );
             }
@@ -198,23 +251,19 @@ pub fn show(
             canvas.painter().rect_stroke(
                 to_screen(r.x, r.y, r.w, r.h),
                 0.0,
-                Stroke::new(2.0, accent),
+                Stroke::new(2.0, ACCENT),
                 StrokeKind::Inside,
             );
             response.clone().on_hover_text(format!(
                 "{}\n{}x{} at ({}, {})",
                 frame.key, r.w, r.h, r.x, r.y
             ));
-            if show_outlines {
-                hovered_key = Some(frame.key.clone());
-            }
+            hovered_key = Some(frame.key.clone());
         }
     }
 
     if building {
-        canvas
-            .painter()
-            .rect_filled(rect, 0.0, ui.visuals().extreme_bg_color.gamma_multiply(0.6));
+        canvas.painter().rect_filled(rect, 0.0, CANVAS_SHADOW);
         let spinner_rect = Rect::from_center_size(rect.center(), Vec2::splat(32.0));
         ui.put(spinner_rect, egui::Spinner::new().size(32.0));
         ui.ctx().request_repaint();

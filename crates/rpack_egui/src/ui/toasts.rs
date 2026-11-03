@@ -1,4 +1,4 @@
-use egui::{Align2, Color32, Context, Frame, Id, Order, RichText, Sense, vec2};
+use egui::{Align2, Color32, Context, Frame, Id, Order, RichText, Sense, pos2};
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,7 +71,8 @@ impl Notifications {
         }
     }
 
-    pub fn show(&mut self, ctx: &Context) {
+    /// Draws the messages above `bottom`, the top of the status bar.
+    pub fn show(&mut self, ctx: &Context, bottom: f32) {
         let now = ctx.input(|i| i.time);
         self.items.retain(|t| now - t.created < t.level.lifetime());
         if self.items.is_empty() {
@@ -79,7 +80,8 @@ impl Notifications {
         }
         let mut dismissed = None;
         egui::Area::new(Id::unique("notifications"))
-            .anchor(Align2::RIGHT_BOTTOM, vec2(-12.0, -48.0))
+            .pivot(Align2::RIGHT_BOTTOM)
+            .fixed_pos(pos2(ctx.content_rect().right() - 12.0, bottom - 12.0))
             .order(Order::Foreground)
             .show(ctx, |ui| {
                 ui.set_max_width(360.0);

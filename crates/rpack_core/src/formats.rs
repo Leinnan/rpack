@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Copy, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(
-    all(feature = "cli", not(target_arch = "wasm32")),
+    all(feature = "clap", not(target_arch = "wasm32")),
     derive(clap::ValueEnum)
 )]
 pub enum SaveImageFormat {

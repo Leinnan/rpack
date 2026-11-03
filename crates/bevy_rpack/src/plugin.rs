@@ -1,11 +1,11 @@
-use crate::{AtlasAsset, SerializableRect};
+use crate::AtlasAsset;
 use bevy_app::{App, Plugin};
 use bevy_asset::{Asset, AssetApp, Assets, Handle, ReflectAsset};
 use bevy_asset::{AssetLoader, AsyncReadExt};
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::system::{Res, SystemParam};
 use bevy_image::{Image, ImageSampler, TextureAtlas, TextureAtlasLayout};
-use bevy_math::{URect, UVec2};
+use bevy_math::UVec2;
 use bevy_platform::collections::HashMap;
 use bevy_reflect::{Reflect, TypePath};
 use bevy_sprite::Sprite;
@@ -33,18 +33,6 @@ pub struct RpackAtlasAsset {
     pub atlas: Handle<TextureAtlasLayout>,
     /// The map of the original file names to indices of the texture atlas.
     pub files: HashMap<String, usize>,
-}
-
-impl From<SerializableRect> for URect {
-    fn from(val: SerializableRect) -> Self {
-        URect {
-            min: UVec2 { x: val.x, y: val.y },
-            max: UVec2 {
-                x: val.x + val.w,
-                y: val.y + val.h,
-            },
-        }
-    }
 }
 
 /// SystemParam helper for accessing and creating components from `Rpack` atlas data.

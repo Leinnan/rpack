@@ -39,9 +39,13 @@ fn main() -> eframe::Result<()> {
     };
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 720.0])
+            .with_inner_size([1280.0, 820.0])
             .with_icon(eframe::icon_data::from_png_bytes(rpack_egui::ICON_DATA).unwrap_or_default())
-            .with_min_inner_size([640.0, 420.0]),
+            .with_min_inner_size([720.0, 460.0])
+            // macOS: the toolbar and the traffic lights share one unified bar.
+            .with_fullsize_content_view(cfg!(target_os = "macos"))
+            .with_titlebar_shown(!cfg!(target_os = "macos"))
+            .with_title_shown(!cfg!(target_os = "macos")),
         ..Default::default()
     };
     eframe::run_native(
@@ -76,20 +80,19 @@ fn main() {
             )
             .await;
 
-        // Remove the loading text and spinner:
+        // Remove the loading text, or say why the app did not start.
         let loading_text = window()
             .and_then(|w| w.document())
             .and_then(|d| d.get_element_by_id("loading_text"));
-        if let Some(loading_text) = loading_text {
-            match start_result {
-                Ok(_) => {
-                    loading_text.remove();
-                }
-                Err(e) => {
+        match (start_result, loading_text) {
+            (Ok(_), Some(loading_text)) => loading_text.remove(),
+            (Ok(_), None) => {}
+            (Err(error), loading_text) => {
+                log::error!("Failed to start eframe: {error:?}");
+                if let Some(loading_text) = loading_text {
                     loading_text.set_inner_html(
-                        "<p> The app has crashed. See the developer console for details. </p>",
+                        "<p>rPack could not start. See the developer console for details.</p>",
                     );
-                    panic!("Failed to start eframe: {e:?}");
                 }
             }
         }

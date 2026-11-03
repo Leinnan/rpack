@@ -429,11 +429,10 @@ mod tests {
                             .get(&atlas.atlas)
                             .is_some()
                     );
-                    if let Some(image) = app.world().resource::<Assets<Image>>().get(&atlas.image) {
-                        if image.clone().try_into_dynamic().unwrap().get_pixel(0, 0) == Rgba(color)
-                        {
-                            break;
-                        }
+                    if let Some(image) = app.world().resource::<Assets<Image>>().get(&atlas.image)
+                        && image.clone().try_into_dynamic().unwrap().get_pixel(0, 0) == Rgba(color)
+                    {
+                        break;
                     }
                 }
                 assert!(

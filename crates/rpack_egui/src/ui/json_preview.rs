@@ -1,3 +1,4 @@
+use super::theme::colors::{JSON_BOOLEAN, JSON_KEY, JSON_NULL, JSON_NUMBER, JSON_STRING};
 use egui::{Color32, FontId, TextFormat, Ui, text::LayoutJob};
 use serde_json::Value;
 
@@ -9,28 +10,16 @@ struct Palette {
 
 impl Palette {
     fn from_ui(ui: &Ui) -> Self {
-        let colors = if ui.visuals().dark_mode {
-            [
-                ui.visuals().text_color(),
-                Color32::from_rgb(125, 190, 255),
-                Color32::from_rgb(160, 215, 145),
-                Color32::from_rgb(245, 195, 120),
-                Color32::from_rgb(210, 165, 245),
-                Color32::from_rgb(190, 190, 190),
-            ]
-        } else {
-            [
-                ui.visuals().text_color(),
-                Color32::from_rgb(0, 80, 160),
-                Color32::from_rgb(30, 110, 40),
-                Color32::from_rgb(145, 75, 0),
-                Color32::from_rgb(120, 45, 160),
-                Color32::from_rgb(90, 90, 90),
-            ]
-        };
         Self {
             font: egui::TextStyle::Monospace.resolve(ui.style()),
-            colors,
+            colors: [
+                ui.visuals().text_color(),
+                JSON_KEY,
+                JSON_STRING,
+                JSON_NUMBER,
+                JSON_BOOLEAN,
+                JSON_NULL,
+            ],
         }
     }
 }
@@ -46,7 +35,7 @@ enum Token {
 }
 
 #[derive(Default)]
-pub(crate) struct JsonPreview {
+pub struct JsonPreview {
     cached: Option<(Palette, LayoutJob)>,
 }
 
@@ -215,26 +204,23 @@ mod tests {
     }
 
     #[test]
-    fn preview_renders_large_values_in_both_themes() {
+    fn preview_renders_large_values() {
         let ctx = egui::Context::default();
         let mut preview = JsonPreview::default();
         let value = json!({"frames": (0..500).map(|i| json!({
             "name": format!("sprite_{i}_{}", "long_name".repeat(20)),
             "size": [16, 32],
         })).collect::<Vec<_>>()});
-        for visuals in [egui::Visuals::dark(), egui::Visuals::light()] {
-            ctx.set_visuals(visuals);
-            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| preview.show(ui, &value));
-            });
-            // This headless test has no renderer to consume texture uploads.
-            output.textures_delta.clear();
-            assert!(!output.shapes.is_empty());
-            assert_eq!(
-                preview.cached.as_ref().unwrap().1.text,
-                serde_json::to_string_pretty(&value).unwrap()
-            );
-        }
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| preview.show(ui, &value));
+        });
+        // This headless test has no renderer to consume texture uploads.
+        output.textures_delta.clear();
+        assert!(!output.shapes.is_empty());
+        assert_eq!(
+            preview.cached.as_ref().unwrap().1.text,
+            serde_json::to_string_pretty(&value).unwrap()
+        );
     }
 
     #[test]

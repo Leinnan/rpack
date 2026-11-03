@@ -2,8 +2,8 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use clap::Subcommand;
-use rpack_cli::TilemapGenerationConfig;
 use rpack_cli::saving::SaveableImage;
+use rpack_cli::{GenerateAtlas, TilemapGenerationConfig};
 
 use rpack_cli::SaveImageFormat;
 

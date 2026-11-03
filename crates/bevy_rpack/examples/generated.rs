@@ -27,10 +27,10 @@ fn show_atlas(
     if *shown {
         return;
     }
-    if let Some(atlas) = atlases.get(&handle.0) {
-        if let Some(key) = atlas.files.keys().min() {
-            commands.spawn(atlas.try_make_sprite(key).expect("key belongs to atlas"));
-            *shown = true;
-        }
+    if let Some(atlas) = atlases.get(&handle.0)
+        && let Some(key) = atlas.files.keys().min()
+    {
+        commands.spawn(atlas.try_make_sprite(key).expect("key belongs to atlas"));
+        *shown = true;
     }
 }

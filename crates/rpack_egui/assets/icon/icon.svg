@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- rPack app icon (master): sprites packed into a square atlas.
+       Big Sur grid: 824px body inset 100px. Atlas area 232..792, gaps 24px.
+       Rendered by `cargo xtask icons`; 32px and below use icon-small.svg. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3a3f"/>
+      <stop offset="1" stop-color="#17171a"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.10"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff9a3c"/>
+      <stop offset="1" stop-color="#e66601"/>
+    </linearGradient>
+    <linearGradient id="ember" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9601a"/>
+      <stop offset="1" stop-color="#a8430a"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd27a"/>
+      <stop offset="1" stop-color="#f5a623"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbf7f0"/>
+      <stop offset="1" stop-color="#ddd6ca"/>
+    </linearGradient>
+    <linearGradient id="slate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7f8794"/>
+      <stop offset="1" stop-color="#565c68"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="pieceShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- tile -->
+  <g filter="url(#shadow)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  </g>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="url(#rim)" stroke-width="3"/>
+
+  <!-- packed sprites -->
+  <g filter="url(#pieceShadow)">
+    <!-- hero, top left -->
+    <rect x="232" y="232" width="320" height="320" rx="36" fill="url(#orange)"/>
+    <!-- right column -->
+    <rect x="576" y="232" width="216" height="148" rx="26" fill="url(#cream)"/>
+    <rect x="576" y="404" width="96" height="148" rx="22" fill="url(#slate)"/>
+    <rect x="696" y="404" width="96" height="148" rx="22" fill="url(#amber)"/>
+    <!-- bottom row -->
+    <rect x="232" y="576" width="148" height="216" rx="26" fill="url(#amber)"/>
+    <rect x="404" y="576" width="148" height="96" rx="22" fill="url(#cream)"/>
+    <rect x="404" y="696" width="148" height="96" rx="22" fill="url(#slate)"/>
+    <rect x="576" y="576" width="216" height="216" rx="30" fill="url(#ember)"/>
+  </g>
+</svg>

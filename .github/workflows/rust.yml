@@ -15,35 +15,65 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - run: cargo fmt --all -- --check
 
-  # trunk:
-  #   name: trunk
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: stable
-  #         target: wasm32-unknown-unknown
-  #         override: true
-  #     - name: Download and install Trunk binary
-  #       working-directory: crates/rpack_egui
-  #       run: wget -qO- https://github.com/thedodd/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
-  #     - name: Build
-  #       working-directory: crates/rpack_egui
-  #       run: ./trunk build
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: check
-  #         args: --all-features --lib --target wasm32-unknown-unknown
+  wasm:
+    name: Wasm check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --locked -p rpack_egui --target wasm32-unknown-unknown
+
+  icons:
+    name: Icon subset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask icons-subset --check
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # Vulkan (lavapipe) so the egui_kittest snapshot tests can render without a GPU.
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev \
+            libvulkan1 mesa-vulkan-drivers
+      - run: cargo clippy --locked --workspace --all-targets
+      # The committed snapshot images are recorded on macOS. Other GPUs rasterize
+      # slightly differently, so there the snapshots are re-recorded instead of compared,
+      # and uploaded for review below; every other assertion still fails the job.
+      - name: Test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" != macOS ]; then export UPDATE_SNAPSHOTS=1; fi
+          cargo test --locked --workspace --no-fail-fast
+      - name: Upload re-recorded snapshots
+        if: always() && runner.os != 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-${{ matrix.os }}
+          path: crates/rpack_egui/tests/snapshots/
+          if-no-files-found: ignore

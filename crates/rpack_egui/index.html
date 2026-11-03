@@ -23,16 +23,6 @@
         <base data-trunk-public-url />
 
         <link data-trunk rel="icon" href="assets/favicon.ico" />
-
-        <link data-trunk rel="copy-file" href="assets/sw.js" />
-        <link data-trunk rel="copy-file" href="assets/manifest.json" />
-        <!--<link data-trunk rel="copy-file" href="assets/icon-1024.png" />
-    <link data-trunk rel="copy-file" href="assets/icon-256.png" />
-    <link data-trunk rel="copy-file" href="assets/icon_ios_touch_192.png" />
-    <link data-trunk rel="copy-file" href="assets/maskable_icon_x512.png" />-->
-
-        <link rel="manifest" href="manifest.json" />
-        <!--<link rel="apple-touch-icon" href="icon_ios_touch_192.png" />-->
         <meta
             name="theme-color"
             media="(prefers-color-scheme: light)"
@@ -41,7 +31,7 @@
         <meta
             name="theme-color"
             media="(prefers-color-scheme: dark)"
-            content="#404040"
+            content="#2b2b2d"
         />
 
         <style>
@@ -51,17 +41,8 @@
             }
 
             body {
-                /* Light mode background color for what is not covered by the egui canvas,
-            or where the egui canvas is translucent. */
-                background: #909090;
-            }
-
-            @media (prefers-color-scheme: dark) {
-                body {
-                    /* Dark mode background color for what is not covered by the egui canvas,
-                or where the egui canvas is translucent. */
-                    background: #404040;
-                }
+                /* What is not covered by the egui canvas. */
+                background: #1e1e20;
             }
 
             /* Allow canvas to fill entire web page: */
@@ -129,6 +110,15 @@
                     transform: rotate(360deg);
                 }
             }
+            #loading_text {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                margin: 0;
+                color: #a8a8ae;
+                font-family: system-ui, sans-serif;
+            }
         </style>
     </head>
 
@@ -136,19 +126,7 @@
         <!-- The WASM code will resize the canvas dynamically -->
         <!-- the id is hardcoded in main.rs . so, make sure both match. -->
         <canvas id="the_canvas_id"></canvas>
-        <!--Register Service Worker. this will cache the wasm / js scripts for offline use (for PWA functionality). -->
-        <!-- Force refresh (Ctrl + F5) to load the latest files instead of cached files  -->
-        <!--<script>
-            // We disable caching during development so that we always view the latest version.
-            if (
-                "serviceWorker" in navigator &&
-                window.location.hash !== "#dev"
-            ) {
-                window.addEventListener("load", function () {
-                    navigator.serviceWorker.register("sw.js");
-                });
-            }
-        </script>-->
+        <p id="loading_text">Loading...</p>
     </body>
 </html>
 

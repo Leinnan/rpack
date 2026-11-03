@@ -4,10 +4,8 @@
 /dist
 skyline-packer-output.png
 result.png
-/Cargo.lock
 /.idea
 /.vscode
-Cargo.lock
 .DS_Store
 Rpack.app
 crates/rpack_egui/static/resources
