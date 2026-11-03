@@ -60,3 +60,8 @@ screenshot:
 [group('package')]
 bundle:
     cd crates/rpack_egui && just bundle
+
+# Create the installer for this OS in target/release/installer
+[group('package')]
+installer:
+    cd crates/rpack_egui && just installer

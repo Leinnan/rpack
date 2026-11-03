@@ -1,8 +1,14 @@
 name: itch.io Build
 
-# By default, runs if you push to master. keeps your deployed app in sync with master branch.
+# Builds the web app and the desktop installers, then pushes each one to its own itch.io channel.
+# Nothing is pushed unless every build succeeds, so the channels stay on the same version.
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        description: "Push the builds to itch.io (otherwise only build them)"
+        default: true
   # push:
   #   branches:
   #     - main
@@ -15,10 +21,10 @@ on:
 #       - published
 
 permissions:
-  contents: write # for committing to gh-pages branch.
+  contents: read
 
 jobs:
-  build-itch-io:
+  build-web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4 # repo checkout
@@ -34,11 +40,51 @@ jobs:
         working-directory: crates/rpack_egui
         # itch.io serves uploads from a nested path, so all urls have to be relative.
         run: ./trunk build --release --public-url ./
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: crates/rpack_egui/dist
+          if-no-files-found: error
+
+  build-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        system: [windows-latest, macos-15, ubuntu-22.04]
+    uses: ./.github/workflows/bundle.yml
+    with:
+      runningSystem: ${{ matrix.system }}
+
+  publish:
+    if: inputs.publish
+    needs: [build-web, build-desktop]
+    runs-on: ubuntu-latest # the publish action runs in Docker, which needs a Linux runner.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { artifact: web, channel: wasm }
+          - { artifact: windows-latest, channel: windows }
+          - { artifact: macos-15, channel: mac }
+          - { artifact: ubuntu-22.04, channel: linux }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: echo "version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "rpack_egui") | .version')" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: upload
+      - name: Restore AppImage permissions
+        # Artifacts don't keep file permissions.
+        run: find upload -name '*.AppImage' -exec chmod +x {} +
       - name: Itch.io - Publish
         uses: KikimoraGames/itch-publish@v0.0.3
         with:
-          gameData: ./crates/rpack_egui/dist
+          gameData: ./upload
           itchUsername: mevlyshkin
           itchGameId: rpack
-          buildChannel: wasm
+          buildChannel: ${{ matrix.channel }}
+          buildNumber: ${{ steps.version.outputs.version }}
           butlerApiKey: ${{ secrets.butlerApi }}

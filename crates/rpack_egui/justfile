@@ -1,4 +1,6 @@
 format_bundle := if os() == "windows" { "--format wxsmsi" } else { if os() == "linux" { "--format appimage" } else { "--format osx" }  }
+bundle_dir := "../../target/release/bundle"
+installer_dir := "../../target/release/installer"
 
 # list available commands
 list:
@@ -13,3 +15,25 @@ create_mac_installer: bundle
 # Create the installer using cargo-bundler
 bundle:
     cargo bundler -r {{format_bundle}}
+
+# Old bundles would otherwise be picked up too, the AppImage name includes the version
+_clean_bundle:
+    rm -rf {{bundle_dir}} {{installer_dir}}
+
+# Build the installer and copy only it to target/release/installer
+[windows]
+installer: _clean_bundle bundle
+    mkdir -p {{installer_dir}}
+    cp {{bundle_dir}}/wsxmsi/*.msi {{installer_dir}}/
+
+# Build the installer and copy only it to target/release/installer
+[macos]
+installer: _clean_bundle create_mac_installer
+    mkdir -p {{installer_dir}}
+    cp {{bundle_dir}}/osx/Rpack.pkg {{installer_dir}}/
+
+# Build the installer and copy only it to target/release/installer
+[linux]
+installer: _clean_bundle bundle
+    mkdir -p {{installer_dir}}
+    cp {{bundle_dir}}/appimage/*.AppImage {{installer_dir}}/
