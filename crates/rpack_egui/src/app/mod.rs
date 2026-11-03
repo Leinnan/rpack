@@ -92,7 +92,7 @@ impl Application {
         match event {
             AppEvent::Images(images) => self.merge_images(ctx, images),
             AppEvent::Build(generation, outcome) => self.finish_build(ctx, generation, outcome),
-            AppEvent::Notify(level, text) => self.state.ui.toasts.push(ctx, level, text),
+            AppEvent::Notify(level, text) => self.state.ui.toasts.push(level, text),
             #[cfg(not(target_arch = "wasm32"))]
             AppEvent::Config {
                 config,
@@ -105,11 +105,10 @@ impl Application {
             #[cfg(not(target_arch = "wasm32"))]
             AppEvent::ConfigUnreadable { path, error } => {
                 self.state.ui.settings.recents.retain(|p| *p != path);
-                self.state.ui.toasts.push(
-                    ctx,
-                    Level::Error,
-                    format!("Could not open {path}: {error}"),
-                );
+                self.state
+                    .ui
+                    .toasts
+                    .push(Level::Error, format!("Could not open {path}: {error}"));
             }
             #[cfg(not(target_arch = "wasm32"))]
             AppEvent::AddRecent(path) => self.add_recent(path),
@@ -172,7 +171,7 @@ impl Application {
                     self.state
                         .ui
                         .toasts
-                        .push(ctx, Level::Info, "JSON copied to the clipboard");
+                        .push(Level::Info, "JSON copied to the clipboard");
                 }
             }
         }

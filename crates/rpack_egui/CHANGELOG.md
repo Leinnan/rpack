@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Dropping a folder also adds the images in its subfolders. A folder holding only subfolders used to add nothing, without any message.
+- Messages shown after a file dialog, such as "Saved atlas.png", no longer disappear early. The time the dialog was open used to count against them.
+
 ## [0.7.0]
 
 ### Added

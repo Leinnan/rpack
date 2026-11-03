@@ -89,12 +89,11 @@ impl Application {
         }
         if duplicates > 0 {
             self.state.ui.toasts.push(
-                ctx,
                 Level::Info,
                 format!("Skipped {duplicates} image(s) that were already added"),
             );
         }
-        self.update_ids_and_warn(ctx);
+        self.update_ids_and_warn();
     }
 
     /// Replaces the project with a config and the images it refers to.
@@ -110,14 +109,13 @@ impl Application {
         }
         self.state.project.settings = settings;
         self.state.project.image_data = images;
-        self.update_ids_and_warn(ctx);
+        self.update_ids_and_warn();
     }
 
-    fn update_ids_and_warn(&mut self, ctx: &egui::Context) {
+    fn update_ids_and_warn(&mut self) {
         let colliding = self.state.project.update_ids();
         if colliding > 0 {
             self.state.ui.toasts.push(
-                ctx,
                 Level::Warning,
                 format!("{colliding} image(s) share a frame name with another image"),
             );

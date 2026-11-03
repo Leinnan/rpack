@@ -37,7 +37,9 @@ impl Level {
 struct Toast {
     level: Level,
     text: String,
-    created: f64,
+    /// Set by the first frame showing it. Pushes can happen before that frame's time
+    /// is known, and no frames run while a native dialog is open.
+    shown_at: Option<f64>,
 }
 
 /// Short-lived messages drawn in the bottom right corner. Click a message to dismiss it.
@@ -49,22 +51,21 @@ pub struct Notifications {
 const MAX_VISIBLE: usize = 5;
 
 impl Notifications {
-    pub fn push(&mut self, ctx: &Context, level: Level, text: impl Into<String>) {
+    pub fn push(&mut self, level: Level, text: impl Into<String>) {
         let text = text.into();
-        let created = ctx.input(|i| i.time);
         // Identical consecutive messages only refresh the timer instead of stacking up.
         if let Some(existing) = self
             .items
             .iter_mut()
             .find(|t| t.level == level && t.text == text)
         {
-            existing.created = created;
+            existing.shown_at = None;
             return;
         }
         self.items.push(Toast {
             level,
             text,
-            created,
+            shown_at: None,
         });
         if self.items.len() > MAX_VISIBLE {
             self.items.remove(0);
@@ -74,7 +75,8 @@ impl Notifications {
     /// Draws the messages above `bottom`, the top of the status bar.
     pub fn show(&mut self, ctx: &Context, bottom: f32) {
         let now = ctx.input(|i| i.time);
-        self.items.retain(|t| now - t.created < t.level.lifetime());
+        self.items
+            .retain_mut(|t| now - *t.shown_at.get_or_insert(now) < t.level.lifetime());
         if self.items.is_empty() {
             return;
         }
@@ -109,5 +111,46 @@ impl Notifications {
             self.items.remove(index);
         }
         ctx.request_repaint_after(Duration::from_millis(250));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn show_at(ctx: &Context, toasts: &mut Notifications, time: f64) {
+        let input = egui::RawInput {
+            time: Some(time),
+            ..Default::default()
+        };
+        let mut output = ctx.run_ui(input, |ui| toasts.show(ui.ctx(), 100.0));
+        output.textures_delta.clear();
+    }
+
+    #[test]
+    fn lifetime_starts_at_the_first_frame_showing_the_message() {
+        let ctx = Context::default();
+        let mut toasts = Notifications::default();
+        show_at(&ctx, &mut toasts, 1.0);
+        toasts.push(Level::Info, "Saved atlas.png");
+        // No frames ran for a while, as with a native save dialog open.
+        show_at(&ctx, &mut toasts, 60.0);
+        assert_eq!(toasts.items.len(), 1);
+        show_at(&ctx, &mut toasts, 63.0);
+        assert_eq!(toasts.items.len(), 1);
+        show_at(&ctx, &mut toasts, 64.0);
+        assert!(toasts.items.is_empty());
+    }
+
+    #[test]
+    fn repeating_a_message_restarts_its_lifetime() {
+        let ctx = Context::default();
+        let mut toasts = Notifications::default();
+        toasts.push(Level::Info, "Saved");
+        show_at(&ctx, &mut toasts, 1.0);
+        show_at(&ctx, &mut toasts, 4.0);
+        toasts.push(Level::Info, "Saved");
+        show_at(&ctx, &mut toasts, 6.0);
+        assert_eq!(toasts.items.len(), 1);
     }
 }
